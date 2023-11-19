@@ -1,0 +1,10 @@
+__pycache__/*
+*.pyc
+*.egg-info
+.DStore
+.nox
+autocron.db
+dist/
+build/
+__pycache__
+_todo.txt
