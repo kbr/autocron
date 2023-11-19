@@ -6,7 +6,7 @@ Administration tool to access the database.
 
 import argparse
 
-from .sql_interface import (
+from autocron.sql_interface import (
     interface,
     MAX_WORKERS_DEFAULT,
 )
@@ -175,7 +175,7 @@ def get_command_line_arguments():
         help="list all task which are cronjobs."
     )
     parser.add_argument(
-        "-r", "--get_results",
+        "-r", "--get-results",
         dest="get_results",
         action="store_true",
         help="list all avialable results."
