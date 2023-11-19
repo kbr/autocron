@@ -338,10 +338,19 @@ class SQLiteInterface:
         crontab="",
         args=(),
         kwargs=None,
+        unique=False,
     ):
         """
-        Store a callable in the task-table of the database.
+        Store a callable in the task-table of the database. If the
+        argument `unique` is given, don't register a callable twice. In
+        this case an allready registered callable with the same
+        signature (module.name) gets overwritten. This can be useful for
+        cron-tasks to not register them multiple times.
         """
+        if unique:
+            tasks = self.get_tasks_by_signature(func)
+            for task in tasks:
+                self.delete_callable(task)
         if not schedule:
             schedule = datetime.datetime.now()
         if not kwargs:

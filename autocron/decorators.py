@@ -48,7 +48,12 @@ def cron(crontab=None,
             crontab=crontab
         )
         schedule = scheduler.get_next_schedule()
-        interface.register_callable(func, schedule=schedule, crontab=crontab)
+        interface.register_callable(
+            func,
+            schedule=schedule,
+            crontab=crontab,
+            unique=True  # don't register cron-tasks twice
+        )
         return func
 
     return wrapper
