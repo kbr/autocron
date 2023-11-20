@@ -1,7 +1,15 @@
 """
 sql_interface.py
 
-SQLite interface for storing tasks
+SQLite interface for storing tasks.
+
+The autocron database consists of three tables:
+task: stores all tasks that should get executed later
+result: stores all results from task returning a result
+settings: configuration settings for a project
+
+
+
 """
 
 import datetime
@@ -12,6 +20,7 @@ import types
 from .configuration import configuration
 
 
+# -- table: task - structure and commands ------------------------------------
 DB_TABLE_NAME_TASK = "task"
 CMD_CREATE_TASK_TABLE = f"""
 CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_TASK}
@@ -51,6 +60,8 @@ CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
 CMD_DELETE_CRON_TASKS = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE crontab <> ''"
 CMD_COUNT_TABLE_ROWS = "SELECT COUNT(*) FROM {table_name}"
 
+
+# -- table: result - structure and commands ----------------------------------
 DB_TABLE_NAME_RESULT = "result"
 CMD_CREATE_RESULT_TABLE = f"""
 CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_RESULT}
@@ -105,6 +116,7 @@ CMD_DELETE_OUTDATED_RESULTS = f"""\
     WHERE status == {TASK_STATUS_READY} AND ttl <= ?"""
 
 
+# -- table: settings - structure and commands --------------------------------
 DB_TABLE_NAME_SETTINGS = "settings"
 CMD_CREATE_SETTINGS_TABLE = f"""
 CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}

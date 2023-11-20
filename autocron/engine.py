@@ -75,7 +75,6 @@ class Engine:
             return self.interface.try_increment_running_workers()
         return False
 
-
     def django_autostart(self, database_file=None):
         """
         Special start-method for django.
@@ -91,7 +90,10 @@ class Engine:
     def start(self, database_file=None):
         """
         Starts the monitor in case no other monitor is already running
-        and the configuration indicates that autocron is active.
+        and the configuration indicates that autocron is active. To
+        start the engine, a project-name is required. The project-name
+        represents the name of the directory in '~/.autocron' where
+        project-specific data are stored (like the database).
         """
         if self.is_start_allowed():
             # start monitor thread

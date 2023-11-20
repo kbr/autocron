@@ -8,12 +8,16 @@ import unittest
 
 from autocron import configuration
 
+AUTOCRON_TEST_PROJECT_NAME = "autocron_test_storage"
+
 
 class TestConfiguration(unittest.TestCase):
 
     def setUp(self):
         # create a fresh Configuration instance fo every test
-        self.configuration = configuration.Configuration()
+        self.configuration = configuration.Configuration(
+            project_name=AUTOCRON_TEST_PROJECT_NAME
+        )
         self.configuration_file = self.configuration.configuration_file
         self.cd = self.configuration.__dict__.copy()
 

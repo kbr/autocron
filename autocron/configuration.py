@@ -16,7 +16,10 @@ except ImportError:
 else:
     DJANGO_IS_INSTALLED = True
 
+AUTOCRON_DIRECTORY = ".autocron"
 DB_FILE_NAME = "autocron.db"
+DEFAULT_PROJECT_NAME = "autocron_storage"
+
 SEMAPHORE_FILE_NAME = "autocron.semaphore"
 CONFIGURATION_FILE_NAME = "autocron.conf"
 CONFIGURATION_SECTION = "autocron"
@@ -35,14 +38,30 @@ class Configuration:
     Class providing the configuration settings.
     """
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, db_filename=DB_FILE_NAME):
-        self.autocron_path = self._get_autocron_directory()
+    def __init__(self, project_name=DEFAULT_PROJECT_NAME, db_filename=DB_FILE_NAME):
+        self.project_name = project_name
         self.db_filename = db_filename
         self.monitor_idle_time = MONITOR_IDLE_TIME
         self.worker_idle_time = WORKER_IDLE_TIME
         self.result_ttl = datetime.timedelta(minutes=RESULT_TTL)
+        self._autocron_path = None
         self.is_active = True
 #         self._read_configuration()
+
+    @property
+    def autocron_path(self):
+        if self._autocron_path is None:
+            try:
+                home_dir = pathlib.Path().home()
+            except RuntimeError:
+                # can't resolve homedir, take the present working
+                # directory. Depending on the application .gitignore
+                # should get extended with a ".autocron/*" entry.
+                home_dir = pathlib.Path.cwd()
+            storage = home_dir / AUTOCRON_DIRECTORY / self.project_name
+            storage.mkdir(parents=True, exist_ok=True)
+            self._autocron_path = storage
+        return self._autocron_path
 
     def _get_autocron_directory(self):
         """
@@ -50,7 +69,7 @@ class Configuration:
         are stored. These files are the database, the semaphore file and
         an optional configuration files. This directory is typically
 
-            "~.autocron/cwd_prefix/"
+            "~.autocron/project_name/"
 
         """
         try:
