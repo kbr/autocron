@@ -90,6 +90,11 @@ def report_results():
     _report_tasks(results, task_type="results")
 
 
+def print_usage():
+    """Print program-description and hint how to get help."""
+    print(f"\n{PGM_NAME}\n{PGM_DESCRIPTION}\nuse option -h for help.\n\n")
+
+
 def reset_defaults():
     """Reset the settings with the default values."""
     settings = interface.get_settings()
@@ -178,7 +183,7 @@ def get_command_line_arguments():
         "-r", "--get-results",
         dest="get_results",
         action="store_true",
-        help="list all avialable results."
+        help="list all available results."
     )
     return parser.parse_args()
 
@@ -203,6 +208,8 @@ def main(args=None):
         report_results()
     elif args.delete_database:
         delete_database()
+    else:
+        print_usage()
 
 
 if __name__ == "__main__":
