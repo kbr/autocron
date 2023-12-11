@@ -29,3 +29,11 @@ def uppload_to_pypi(session):
     session.install("-e", ".")
     session.install("twine")
     session.run("twine", "upload", "dist/*")
+
+@nox.session
+def sphinx(session):
+    session.install("-e", ".")
+    session.install("pip-tools==7.3.0")
+    session.run("pip-compile", "--strip-extras", "-q", "docs/requirements/requirements.in")
+    session.install("-r", "docs/requirements/requirements.txt")
+    session.run("sphinx-build", "docs", "docs/build")

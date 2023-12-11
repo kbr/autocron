@@ -1,10 +1,10 @@
-__pycache__/*
-*.pyc
-*.egg-info
 .DStore
 .nox
-autocron.db
-dist/
-build/
-__pycache__
+*.pyc
+*.egg-info
+__pycache__/*
 _todo.txt
+autocron.db
+build/
+dist/
+docs/build/*
