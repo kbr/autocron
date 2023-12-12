@@ -152,7 +152,7 @@ def get_command_line_arguments():
         "--delete-database",
         dest="delete_database",
         action="store_true",
-        help="delete the current database and creates a new clean one with "\
+        help="delete the current database and create a new clean one with "\
              "the default settings."
     )
     parser.add_argument(
@@ -165,13 +165,13 @@ def get_command_line_arguments():
         "-t", "--get-tasks",
         dest="get_tasks",
         action="store_true",
-        help="list all tasks waiting for execution."
+        help="list all waiting tasks."
     )
     parser.add_argument(
         "-d", "--get-tasks-on-due",
         dest="get_tasks_on_due",
         action="store_true",
-        help="lists all tasks waiting for execution and are on due."
+        help="list all waiting tasks that are on due."
     )
     parser.add_argument(
         "-c", "--get-cron-tasks",
