@@ -244,9 +244,44 @@ class SQLiteInterface:
     SQLite interface for application specific operations.
     """
 
-    def __init__(self, db_name=":memory:"):
+    def __init__(self, db_name=None):
+        self._preregistered_tasks = []
         self.db_name = db_name
-        self._init_database()
+        if self.db_name is not None:
+            self._init_database()
+
+    @property
+    def is_initialized(self):
+        """Flag whether the database is available."""
+        return self.db_name is not None
+
+    def init_database(self, db_name):
+        """
+        Public callable for delayed initialization. Set the database
+        (which is a string or Path) and runs the correponding
+        initialization.
+        """
+        if not self.is_initialized:
+            self.db_name = db_name
+            self._init_database()
+
+    def register_preregistered_tasks(self):
+        """
+        Run the stored registrations on the now up and
+        running database.
+        """
+        for task in self._preregistered_tasks:
+            data = pickle.loads(task)
+            self.register_callable(**data)
+
+    def _preregister_task(self, data):
+        """
+        Take the data, which is a dictionary,and convert it to another
+        dict without the key 'self'. Pickle the dict and append it to
+        _preregistered tasks.
+        """
+        data = {k: v for k, v in data.items() if k != "self"}
+        self._preregistered_tasks.append(pickle.dumps(data))
 
     def _init_database(self):
         """
@@ -359,24 +394,27 @@ class SQLiteInterface:
         signature (module.name) gets overwritten. This can be useful for
         cron-tasks to not register them multiple times.
         """
-        if unique:
-            tasks = self.get_tasks_by_signature(func)
-            for task in tasks:
-                self.delete_callable(task)
-        if not schedule:
-            schedule = datetime.datetime.now()
-        if not kwargs:
-            kwargs = {}
-        arguments = pickle.dumps((args, kwargs))
-        data = {
-            "uuid": uuid,
-            "schedule": schedule,
-            "crontab": crontab,
-            "function_module": func.__module__,
-            "function_name": func.__name__,
-            "function_arguments": arguments,
-        }
-        self._execute(CMD_STORE_TASK, data)
+        if self.is_initialized:
+            if unique:
+                tasks = self.get_tasks_by_signature(func)
+                for task in tasks:
+                    self.delete_callable(task)
+            if not schedule:
+                schedule = datetime.datetime.now()
+            if not kwargs:
+                kwargs = {}
+            arguments = pickle.dumps((args, kwargs))
+            data = {
+                "uuid": uuid,
+                "schedule": schedule,
+                "crontab": crontab,
+                "function_module": func.__module__,
+                "function_name": func.__name__,
+                "function_arguments": arguments,
+            }
+            self._execute(CMD_STORE_TASK, data)
+        else:
+            self._preregister_task(locals())
 
     def get_tasks(self):
         """

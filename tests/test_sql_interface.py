@@ -546,3 +546,58 @@ class TestHybridNamespace(unittest.TestCase):
         assert self.attr_dict.pi == self.data["pi"]
         assert self.attr_dict["answer"] == self.data["answer"]
         assert self.attr_dict.answer == self.data["answer"]
+
+
+class TestDelayedInitialization(unittest.TestCase):
+    """
+    Special case of the TestCronDecorator suite assuming that the name
+    of the database will get provided by the start() function which will
+    get called after the @con-decorators have been executed at import
+    time. So these tests are testing the preregistration of callables.
+    """
+
+    def setUp(self):
+        # set up a non-initialized instance of the sql_interface,
+        self.orig_interface = decorators.interface
+        decorators.interface = sql_interface.SQLiteInterface()
+
+    def tearDown(self):
+        if decorators.interface.db_name is not None:
+            pathlib.Path(decorators.interface.db_name).unlink()
+        decorators.interface = self.orig_interface
+
+    def test_preregistration(self):
+        # register a cronfunction (defined near TestCronDecorator()) before
+        # the database has been set up.
+        decorators.interface.register_callable(cron_function)
+        # should fail, because the database has not been set up yet:
+        self.assertRaises(TypeError, decorators.interface.get_tasks)
+        decorators.interface.init_database(TEST_DB_NAME)
+        # should work now but without any entries in new database:
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 0
+        # register the preregistered tasks. The cron_function()
+        # should be in the database now:
+        decorators.interface.register_preregistered_tasks()
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 1
+        # check that the task is indeed the cron_function()
+        # (the tasks are of type 'HybridNamespace'. See worker.process_task)
+        task = tasks[0]
+        assert task.function_name == cron_function.__name__
+
+    def test_preregister_cron_function(self):
+        # use the cron decorator to register cron functions
+        cron_decorator = decorators.cron()
+        cron_decorator(cron_function)
+        cron_decorator(delay_function)
+        # set the database and check for two entries
+        decorators.interface.init_database(TEST_DB_NAME)
+        decorators.interface.register_preregistered_tasks()
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 2
+        # registration of other functions should work as expected:
+        decorators.interface.register_callable(test_multiply)
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 3
+
