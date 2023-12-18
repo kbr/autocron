@@ -1,8 +1,28 @@
 """
-configuration.py
+Handle the configuration settings. There is no need to set up the
+configuration before starting autocron because they are set to usable
+defaults. The settings are:
 
-Module to get the configuration from the standard (default) settings or
-adapt them from web-frameworks (currently django).
+- monitor_idle_time: this is the time interval for autocron to check
+whether the worker is still running or needs a restart. Defaults to 2
+seconds.
+
+- worker_idle_time: when all tasks are processed the worker turns to
+sleep for a time interval before checking whether new tasks are on due.
+This time interval defaults to 4 seconds.
+
+- result_ttl: this is the lifetime of results from tasks returning
+results. After this lifetime the results are deleted from the autotask
+database. This value defaults to 1800 seconds (30 minutes).
+
+- is_active: this is a flag whether autocron should start at all. Can be
+handy for debugging, depending on the used application. Defaults to
+True.
+
+All these defaults can be set in the autocron database by means of the
+``autocron`` commandline admin tool. To apply changes the application
+must get restarted.
+
 """
 
 import configparser
