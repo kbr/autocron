@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 
-from .configuration import configuration
+# from .configuration import configuration
 from .sql_interface import interface
 
 
@@ -69,18 +69,7 @@ class Engine:
             for signalnum in (signal.SIGINT, signal.SIGTERM)
         }
 
-    def is_start_allowed(self):
-        """
-        Return True if autocron is active and more running worker are
-        allowed. Return False if a worker is already running, no more
-        worker allowed or autocron is not active.
-        """
-        if configuration.is_active and not self.monitor_thread:
-            return self.interface.try_increment_running_workers()
-        return False
-
-
-    def start(self, database_file=None):
+    def start(self, database_file):
         """
         Starts the monitor in case no other monitor is already running
         and the configuration indicates that autocron is active. To
@@ -88,7 +77,10 @@ class Engine:
         represents the name of the directory in '~/.autocron' where
         project-specific data are stored (like the database).
         """
-        if self.is_start_allowed():
+        self.interface.init_database(database_file)
+        if not self.monitor_thread:
+            # TODO: for multiprocessing check database first for
+            # a semaphore indicating an already running monitor.
             # start monitor thread
             self.monitor_thread = threading.Thread(
                 target=start_worker_monitor,
