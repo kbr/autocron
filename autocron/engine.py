@@ -77,6 +77,10 @@ class Engine:
         project-specific data are stored (like the database).
         """
         self.interface.init_database(database_file)
+        # TODO: test for semaphore flag in db
+        # if not set, set it
+        # then start the monitor (see below)
+        # otherwise don't start the engine.
         if not self.monitor_thread:
             # TODO: for multiprocessing check database first for
             # a semaphore indicating an already running monitor.
@@ -111,6 +115,3 @@ class Engine:
         self.stop()
         signal.signal(signalnum, self.original_handlers[signalnum])
         signal.raise_signal(signalnum)  # requires Python >= 3.8
-
-
-engine = Engine()

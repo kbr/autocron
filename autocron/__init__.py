@@ -7,11 +7,13 @@ from .decorators import (
     cron,
     delay,
 )
-from .engine import engine as _engine
+from .engine import Engine
 
 
 __all__ = ["cron", "delay", "start"]
 __version__ = "0.4.dev"
+
+_engine = Engine()
 
 
 def start(database_file=None):
