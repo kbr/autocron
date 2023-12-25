@@ -439,33 +439,33 @@ class TestDelayDecorator(unittest.TestCase):
         self.orig_worker_interface = worker.interface
         worker.interface = decorators.interface =\
             sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
-        self._deactivate()
 
     def tearDown(self):
         pathlib.Path(decorators.interface.db_name).unlink()
         decorators.interface = self.orig_decorator_interface
         worker.interface = self.orig_worker_interface
-        self._deactivate()
 
     @staticmethod
     def _activate():
-        configuration.configuration.is_active = True
+        decorators.interface.db_name = TEST_DB_NAME
 
     @staticmethod
     def _deactivate():
-        configuration.configuration.is_active = False
+        decorators.interface.db_name = None
 
     def test_inactive(self):
         # does not return the original function but calls
         # the original function indirect instead of registering
         # the task in the db.
+        self._deactivate()
         wrapper = decorators.delay(delay_function)
         assert wrapper() == 42
+        # activate so that get_tasks_by_signature() works
+        self._activate()
         entries = decorators.interface.get_tasks_by_signature(delay_function)
         assert len(entries) == 0
 
     def test_active(self):
-        self._activate()
         wrapper = decorators.delay(delay_function)
         wrapper_return_value = wrapper()
         assert wrapper_return_value != 42
@@ -487,7 +487,6 @@ class TestDelayDecorator(unittest.TestCase):
 
         """
         # 1: wrap function and call the wrapper with arguments
-        self._activate()
         wrapper = decorators.delay(test_adder)
         uuid_ = wrapper(40, 2)
         assert uuid_ is not None

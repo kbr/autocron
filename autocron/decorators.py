@@ -5,7 +5,6 @@ as cron-tasks or to get executed later. After autocron integration to the applic
 
 import uuid
 
-from .configuration import configuration
 from .schedule import CronScheduler
 from .sql_interface import interface
 
@@ -124,7 +123,7 @@ def delay(func):
     The decorator does not take any arguments. Calling ``sendmail()`` will return from the call immediately and this callable will get executed later in another process.
     """
     def wrapper(*args, **kwargs):
-        if configuration.is_active:
+        if interface.is_initialized:
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
