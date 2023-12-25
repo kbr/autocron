@@ -10,7 +10,6 @@ import subprocess
 import sys
 import threading
 
-# from .configuration import configuration
 from .sql_interface import interface
 
 

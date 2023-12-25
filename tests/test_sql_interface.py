@@ -448,11 +448,11 @@ class TestDelayDecorator(unittest.TestCase):
 
     @staticmethod
     def _activate():
-        decorators.interface.db_name = TEST_DB_NAME
+        decorators.interface.accept_registrations = True
 
     @staticmethod
     def _deactivate():
-        decorators.interface.db_name = None
+        decorators.interface.accept_registrations = False
 
     def test_inactive(self):
         # does not return the original function but calls

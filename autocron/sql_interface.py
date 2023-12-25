@@ -250,6 +250,7 @@ class SQLiteInterface:
     def __init__(self, db_name=None):
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
+        self.accept_registrations = True
         self.db_name = db_name
         if self.db_name is not None:
             self._init_database()

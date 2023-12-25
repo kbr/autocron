@@ -10,9 +10,10 @@ import signal
 import sys
 import time
 
-from autocron.configuration import configuration
 from autocron.schedule import CronScheduler
 from autocron.sql_interface import interface
+
+WORKER_IDLE_TIME = 4.0  # seconds
 
 
 class Worker:
@@ -26,10 +27,10 @@ class Worker:
         self.error_message = None
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
-        # prevent decorated function to register itself again
+        # prevent delay-decorated function to register itself again
         # when called as task.
         # (this is save because the worker runs in its own process)
-        configuration.is_active = False
+        interface.accept_registrations = False
 
     def terminate(self, *args):  # pylint: disable=unused-argument
         """
@@ -47,7 +48,7 @@ class Worker:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
                 interface.delete_outdated_results()
-                time.sleep(configuration.worker_idle_time)
+                time.sleep(WORKER_IDLE_TIME)
 
     def handle_tasks(self):
         """

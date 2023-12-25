@@ -123,7 +123,7 @@ def delay(func):
     The decorator does not take any arguments. Calling ``sendmail()`` will return from the call immediately and this callable will get executed later in another process.
     """
     def wrapper(*args, **kwargs):
-        if interface.is_initialized:
+        if interface.accept_registrations:
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
