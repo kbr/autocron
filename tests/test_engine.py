@@ -15,25 +15,21 @@ import subprocess
 import time
 import unittest
 
-from autocron import configuration
 from autocron import engine
 from autocron import sql_interface
 
 
-TEST_DB_NAME = configuration.configuration.autocron_path / "test.db"
+TEST_DB_NAME = "test.db"
 
 
 class TestEngine(unittest.TestCase):
 
     def setUp(self):
         self.interface = sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
-        self._configuration_is_active = configuration.configuration.is_active
         self.engine = engine.Engine(interface=self.interface)
-        self.cc = configuration.configuration
 
     def tearDown(self):
         # clean up if tests don't run through
-        configuration.configuration.is_active = self._configuration_is_active
         pathlib.Path(self.interface.db_name).unlink()
 
     def test_start_subprocess(self):

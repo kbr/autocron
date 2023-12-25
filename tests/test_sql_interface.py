@@ -12,13 +12,12 @@ import time
 import unittest
 import uuid
 
-from autocron import configuration
 from autocron import decorators
 from autocron import sql_interface
 from autocron import worker
 
 
-TEST_DB_NAME = configuration.configuration.autocron_path / "test.db"
+TEST_DB_NAME = "test.db"
 
 
 def test_callable(*args, **kwargs):
@@ -35,11 +34,11 @@ class TestSQLInterface(unittest.TestCase):
 
     def setUp(self):
         self.interface = sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
-        self._result_ttl = configuration.configuration.result_ttl
+        self._result_ttl = self.interface._result_ttl
 
     def tearDown(self):
         pathlib.Path(self.interface.db_name).unlink()
-        configuration.configuration.result_ttl = self._result_ttl
+        self.interface._result_ttl = self._result_ttl
 
     def test_storage(self):
         entries = self.interface.get_tasks_on_due()
@@ -183,7 +182,7 @@ class TestSQLInterface(unittest.TestCase):
         assert result.has_error is True
 
     def test_do_not_delete_waiting_results(self):
-        configuration.configuration.result_ttl = datetime.timedelta()
+        self.interface._result_ttl = datetime.timedelta()
         self.interface.register_result(test_callable, uuid.uuid4().hex)
         self.interface.register_result(test_adder, uuid.uuid4().hex)
         entries = self.interface.count_results()
@@ -383,19 +382,8 @@ class TestCronDecorator(unittest.TestCase):
         pathlib.Path(decorators.interface.db_name).unlink()
         decorators.interface = self.orig_interface
 
-#     def test_cron_no_arguments_inactive(self):
-#         # the database should have no entry with the default crontab
-#         # if configuration is not active
-#         wrapper = decorators.cron()
-#         func = wrapper(cron_function)
-#         assert func == cron_function
-#         entries = list(decorators.interface.get_tasks_by_signature(cron_function))
-#         assert len(entries) == 0
-
     def test_cron_no_arguments_active(self):
         # the database should have one entry with the default crontab
-        # if configuration is active
-#         configuration.configuration.is_active = True
         wrapper = decorators.cron()
         func = wrapper(cron_function)
         assert func == cron_function
@@ -403,7 +391,6 @@ class TestCronDecorator(unittest.TestCase):
         assert len(entries) == 1
         entry = entries[0]
         assert entry["crontab"] == decorators.DEFAULT_CRONTAB
-#         configuration.configuration.is_active = False
 
     def test_suppress_identic_cronjobs(self):
         # register multiple cronjobs of a single callable.
@@ -417,16 +404,14 @@ class TestCronDecorator(unittest.TestCase):
         assert len(entries) == 2
         # now add the same function with the cron decorator:
         crontab = "10 2 1 * *"
-        configuration.configuration.is_active = True
         wrapper = decorators.cron(crontab=crontab)
         func = wrapper(cron_function)
-        # just a single entry should no be in the database
+        # just a single entry should now be in the database
         # (the one added by the decorator):
         entries = list(decorators.interface.get_tasks_by_signature(cron_function))
         assert len(entries) == 1
         entry = entries[0]
         assert entry["crontab"] == crontab
-        configuration.configuration.is_active = False
 
 
 def delay_function():
@@ -479,7 +464,7 @@ class TestDelayDecorator(unittest.TestCase):
         """
         Test story:
 
-        1. wrap a function with the delegate decorator.
+        1. wrap a function with the delay decorator.
            This should return a uuid.
         2. Check for task entry in db.
         3. Then call `Worker.handle_tasks` what should return True.
@@ -502,8 +487,8 @@ class TestDelayDecorator(unittest.TestCase):
 
         # 3: let the worker handle the task:
         # instanciate but don't start the worker
-        # this will set configuration.is_active to False, because the
-        # worker assumes to run in a separate process.
+        # this will set interface.accept_registrations to False, because the
+        # worker will run in a separate process.
         # This is important as otherwise calling the task will not execute
         # the task but registering the task again by the wrapper.
         worker_ = worker.Worker()

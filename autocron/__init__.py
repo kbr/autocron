@@ -10,7 +10,7 @@ from .decorators import (
 from .engine import engine as _engine
 
 
-__all__ = ["cron", "delay", "django_autostart", "start"]
+__all__ = ["cron", "delay", "start"]
 __version__ = "0.4.dev"
 
 
