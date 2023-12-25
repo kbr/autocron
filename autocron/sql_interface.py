@@ -17,8 +17,8 @@ import pickle
 import sqlite3
 import types
 
-from .configuration import configuration
 
+DB_FILE_NAME = "autocron.db"
 
 # -- table: task - structure and commands ------------------------------------
 DB_TABLE_NAME_TASK = "task"
@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_RESULT}
 TASK_STATUS_WAITING = 0
 TASK_STATUS_READY = 1
 TASK_STATUS_ERROR = 3
+
+# Storage time (time to live) for results in seconds
+RESULT_TTL = 1800
 
 CMD_STORE_RESULT = f"""
 INSERT INTO {DB_TABLE_NAME_RESULT} VALUES
@@ -246,6 +249,7 @@ class SQLiteInterface:
 
     def __init__(self, db_name=None):
         self._preregistered_tasks = []
+        self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
         self.db_name = db_name
         if self.db_name is not None:
             self._init_database()
@@ -473,9 +477,9 @@ class SQLiteInterface:
 
     # -- result-methods ---
 
-    @staticmethod
-    def _get_result_ttl():
-        return datetime.datetime.now() + configuration.result_ttl
+    @property
+    def result_ttl(self):
+        return datetime.datetime.now() + self._result_ttl
 
     def register_result(
             self,
@@ -501,7 +505,7 @@ class SQLiteInterface:
             "function_arguments": arguments,
             "function_result": pickle.dumps(None),
             "error_message": "",
-            "ttl": self._get_result_ttl(),
+            "ttl": self.result_ttl,
         }
         self._execute(CMD_STORE_RESULT, data)
 
@@ -530,7 +534,7 @@ class SQLiteInterface:
         """
         status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
         function_result = pickle.dumps(result)
-        ttl = self._get_result_ttl()
+        ttl = self.result_ttl
         parameters = status, function_result, error_message, ttl, uuid
         self._execute(CMD_UPDATE_RESULT, parameters)
 
@@ -607,7 +611,9 @@ class SQLiteInterface:
         return False
 
 
-interface = SQLiteInterface(db_name=configuration.db_file)
+# TODO: make SQLiteInterface a singleton
+
+interface = SQLiteInterface(db_name=DB_FILE_NAME)
 # on start delete cronjobs from the last run. They may have changed
 # an will reread after deletion here.
 interface.delete_cronjobs()

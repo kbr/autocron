@@ -197,7 +197,8 @@ class TestSQLInterface(unittest.TestCase):
             uuid_,
             status=sql_interface.TASK_STATUS_READY
         )
-        configuration.configuration.result_ttl = datetime.timedelta()
+        # set ttl to 0:
+        self.interface._result_ttl = datetime.timedelta()
         # this result is outdated
         self.interface.register_result(
             test_adder,
@@ -228,7 +229,7 @@ class TestSQLInterface(unittest.TestCase):
             status=sql_interface.TASK_STATUS_READY
         )
         # set ttl to 0:
-        configuration.configuration.result_ttl = datetime.timedelta()
+        self.interface._result_ttl = datetime.timedelta()
         # the outdated result:
         self.interface.register_result(
             test_callable,
