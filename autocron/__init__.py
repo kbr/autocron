@@ -3,7 +3,6 @@ autocron:
 
 simple background task handling with no dependencies.
 """
-from . import configuration
 from .decorators import (
     cron,
     delay,
@@ -21,13 +20,3 @@ def start(database_file=None):
     activate autocron.
     """
     _engine.start(database_file=database_file)
-
-
-def django_autostart(database_file=None):
-    """
-    Start autocron on a django-application depending on the
-    debug-settings. If debug is True, autocron will not start.
-    """
-    debug = configuration.configuration.get_django_debug_setting()
-    if not debug:
-        start(database_file=database_file)
