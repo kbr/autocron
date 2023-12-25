@@ -8,7 +8,11 @@ PYTHON_DEVELOPMENT_VERSION = "3.11"
 @nox.session(python=PYTHON_TEST_VERSIONS)
 def test(session):
     session.install("-e", ".")
-    session.run("python", "-m", "unittest")
+    if session.posargs:
+        testfiles = [f"tests/{f}.py" for f in session.posargs]
+    else:
+        testfiles = []
+    session.run("python", "-m", "unittest", *testfiles)
 
 
 @nox.session
