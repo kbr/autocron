@@ -247,6 +247,13 @@ class SQLiteInterface:
     SQLite interface for application specific operations.
     """
 
+    _instance = None
+
+    def __new__(cls, db_name=None):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self, db_name=None):
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
