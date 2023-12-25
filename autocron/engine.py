@@ -14,6 +14,7 @@ from .configuration import configuration
 from .sql_interface import interface
 
 
+MONITOR_IDLE_TIME = 2.0  # seconds
 WORKER_MODULE_NAME = "worker.py"
 
 
@@ -27,7 +28,7 @@ def start_subprocess(database_file=None):
     cmd = [sys.executable, worker_file]
     if database_file:
         cmd.append(database_file)
-    cwd = configuration.cwd
+    cwd = pathlib.Path.cwd()
     return subprocess.Popen(cmd, cwd=cwd)
 
 
@@ -39,7 +40,7 @@ def start_worker_monitor(exit_event, database_file=None):
     while True:
         if process is None or process.poll() is not None:
             process = start_subprocess(database_file)
-        if exit_event.wait(timeout=configuration.monitor_idle_time):
+        if exit_event.wait(timeout=MONITOR_IDLE_TIME):
             break
     # got exit event: terminate worker
     # running_worker decrement is triggered in the stop() method
@@ -50,7 +51,10 @@ def start_worker_monitor(exit_event, database_file=None):
 class Engine:
     """
     The Engine is the entry-point for autocron. On import an Entry
-    instance gets created and the method start is called. Depending on
+    instance gets created and the method start is called.
+    TODO: this is no longer true. The engine must get started explicitly.
+
+    Depending on
     the configuration will start the worker-monitor and the background
     process. If the (auto-)configuration is not active, the method start
     will just return doing nothing.
@@ -75,17 +79,6 @@ class Engine:
             return self.interface.try_increment_running_workers()
         return False
 
-    def django_autostart(self, database_file=None):
-        """
-        Special start-method for django.
-        Will start autocron if django.settings.DEBUG is False
-        """
-        # this will block if django is not ready.
-        # therefore django_autostart must get called from the
-        # AppConfig.ready() method.
-        debug_mode = configuration.get_django_debug_setting()
-        if not debug_mode:
-            self.start(database_file=database_file)
 
     def start(self, database_file=None):
         """
