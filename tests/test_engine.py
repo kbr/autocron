@@ -25,7 +25,9 @@ TEST_DB_NAME = "test.db"
 class TestEngine(unittest.TestCase):
 
     def setUp(self):
-        self.interface = sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
         self.engine = engine.Engine(interface=self.interface)
 
     def tearDown(self):

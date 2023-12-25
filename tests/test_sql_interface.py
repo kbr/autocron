@@ -33,7 +33,9 @@ def test_multiply(a, b):
 class TestSQLInterface(unittest.TestCase):
 
     def setUp(self):
-        self.interface = sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
         self._result_ttl = self.interface._result_ttl
 
     def tearDown(self):
@@ -364,7 +366,6 @@ class TestSQLInterface(unittest.TestCase):
         self.assertFalse(self.interface.try_increment_running_workers())
 
 
-
 # decorator testing includes database access.
 # for easier testing decorator tests are included here.
 
@@ -375,8 +376,11 @@ def cron_function():
 class TestCronDecorator(unittest.TestCase):
 
     def setUp(self):
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
         self.orig_interface = decorators.interface
-        decorators.interface = sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
+        decorators.interface = self.interface
 
     def tearDown(self):
         pathlib.Path(decorators.interface.db_name).unlink()
@@ -387,7 +391,7 @@ class TestCronDecorator(unittest.TestCase):
         wrapper = decorators.cron()
         func = wrapper(cron_function)
         assert func == cron_function
-        entries = list(decorators.interface.get_tasks_by_signature(cron_function))
+        entries = list(self.interface.get_tasks_by_signature(cron_function))
         assert len(entries) == 1
         entry = entries[0]
         assert entry["crontab"] == decorators.DEFAULT_CRONTAB
@@ -398,9 +402,9 @@ class TestCronDecorator(unittest.TestCase):
         # the db then should hold just a single entry deleting
         # the other ones.
         # should not happen:
-        decorators.interface.register_callable(cron_function, crontab=decorators.DEFAULT_CRONTAB)
-        decorators.interface.register_callable(cron_function, crontab=decorators.DEFAULT_CRONTAB)
-        entries = list(decorators.interface.get_tasks_by_signature(cron_function))
+        self.interface.register_callable(cron_function, crontab=decorators.DEFAULT_CRONTAB)
+        self.interface.register_callable(cron_function, crontab=decorators.DEFAULT_CRONTAB)
+        entries = list(self.interface.get_tasks_by_signature(cron_function))
         assert len(entries) == 2
         # now add the same function with the cron decorator:
         crontab = "10 2 1 * *"
@@ -408,7 +412,7 @@ class TestCronDecorator(unittest.TestCase):
         func = wrapper(cron_function)
         # just a single entry should now be in the database
         # (the one added by the decorator):
-        entries = list(decorators.interface.get_tasks_by_signature(cron_function))
+        entries = list(self.interface.get_tasks_by_signature(cron_function))
         assert len(entries) == 1
         entry = entries[0]
         assert entry["crontab"] == crontab
@@ -421,23 +425,25 @@ def delay_function():
 class TestDelayDecorator(unittest.TestCase):
 
     def setUp(self):
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+
         self.orig_decorator_interface = decorators.interface
+        decorators.interface = self.interface
         self.orig_worker_interface = worker.interface
-        worker.interface = decorators.interface =\
-            sql_interface.SQLiteInterface(db_name=TEST_DB_NAME)
+        worker.interface = self.interface
 
     def tearDown(self):
-        pathlib.Path(decorators.interface.db_name).unlink()
+        pathlib.Path(self.interface.db_name).unlink()
         decorators.interface = self.orig_decorator_interface
         worker.interface = self.orig_worker_interface
 
-    @staticmethod
-    def _activate():
-        decorators.interface.accept_registrations = True
+    def _activate(self):
+        self.interface.accept_registrations = True
 
-    @staticmethod
-    def _deactivate():
-        decorators.interface.accept_registrations = False
+    def _deactivate(self):
+        self.interface.accept_registrations = False
 
     def test_inactive(self):
         # does not return the original function but calls
@@ -448,7 +454,7 @@ class TestDelayDecorator(unittest.TestCase):
         assert wrapper() == 42
         # activate so that get_tasks_by_signature() works
         self._activate()
-        entries = decorators.interface.get_tasks_by_signature(delay_function)
+        entries = self.interface.get_tasks_by_signature(delay_function)
         assert len(entries) == 0
 
     def test_active(self):
@@ -457,7 +463,7 @@ class TestDelayDecorator(unittest.TestCase):
         assert wrapper_return_value != 42
         assert isinstance(wrapper_return_value, str) is True  # return uuid as string
         assert len(wrapper_return_value) == 32  # length of a uuid.hex string
-        entries = decorators.interface.get_tasks_by_signature(delay_function)
+        entries = self.interface.get_tasks_by_signature(delay_function)
         assert len(entries) == 1
 
     def test_active_and_get_result(self):

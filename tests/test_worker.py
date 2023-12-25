@@ -10,7 +10,6 @@ import time
 import unittest
 
 from autocron import engine
-from autocron import sql_interface
 from autocron import worker
 
 

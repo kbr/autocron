@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 
-from .sql_interface import interface
+from .sql_interface import SQLiteInterface
 
 
 MONITOR_IDLE_TIME = 2.0  # seconds
@@ -59,8 +59,8 @@ class Engine:
     will just return doing nothing.
     """
     # pylint: disable=redefined-outer-name
-    def __init__(self, interface=interface):
-        self.interface = interface  # allow dependency injection for tests
+    def __init__(self, interface=None):
+        self.interface = interface if interface else SQLiteInterface()
         self.exit_event = threading.Event()
         self.monitor_thread = None
         self.original_handlers = {

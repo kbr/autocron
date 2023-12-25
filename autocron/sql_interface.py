@@ -249,23 +249,82 @@ class SQLiteInterface:
 
     _instance = None
 
-    def __new__(cls, db_name=None):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_name=None):
+    def __init__(self):
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
         self.accept_registrations = True
-        self.db_name = db_name
-        if self.db_name is not None:
-            self._init_database()
+        self.db_name = None
 
     @property
     def is_initialized(self):
         """Flag whether the database is available."""
         return self.db_name is not None
+
+    def _init_database(self):
+        """
+        Creates a new database in case that an older one is not existing
+        and in case of missing settings set the settings-default values.
+        """
+        self._create_tables()
+        self._initialize_settings_table()
+
+    def _create_tables(self):
+        """
+        Create all used tables in case of a new db and missing tables.
+        """
+        self._execute(CMD_CREATE_TASK_TABLE)
+        self._execute(CMD_CREATE_RESULT_TABLE)
+        self._execute(CMD_CREATE_SETTINGS_TABLE)
+
+    def _initialize_settings_table(self):
+        """
+        Check for an existing settings row in the settings-table.
+        If there is no row create an entry with the default values.
+        """
+        rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
+        if not rows:
+            data = {"max_workers": 1, "running_workers": 0}
+            self._execute(CMD_SETTINGS_STORE_VALUES, data)
+
+    def _count_table_rows(self, table_name):
+        """
+        Helper function to count the number of entries in the given
+        table. Returns a numeric value. In case of an unknown table_name
+        a sqlite3.OperationalError will get raised.
+        """
+        cmd = CMD_COUNT_TABLE_ROWS.format(table_name=table_name)
+        cursor = self._execute(cmd)
+        number_of_rows = cursor.fetchone()[0]
+        return number_of_rows
+
+    def _execute(self, cmd, parameters=()):
+        """
+        Run a command with parameters. Parameters can be a sequence of
+        values to get used in an ordered way or a dictionary with
+        key-value pairs, where the key are the value-names used in the
+        db (i.e. the column names).
+        """
+        con = sqlite3.connect(
+            self.db_name,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        with con:
+            return con.execute(cmd, parameters)
+
+    def _preregister_task(self, data):
+        """
+        Take the data, which is a dictionary,and convert it to another
+        dict without the key 'self'. Pickle the dict and append it to
+        _preregistered tasks.
+        """
+        data = {k: v for k, v in data.items() if k != "self"}
+        self._preregistered_tasks.append(pickle.dumps(data))
+
 
     def init_database(self, db_name):
         """
@@ -285,67 +344,6 @@ class SQLiteInterface:
         for task in self._preregistered_tasks:
             data = pickle.loads(task)
             self.register_callable(**data)
-
-    def _preregister_task(self, data):
-        """
-        Take the data, which is a dictionary,and convert it to another
-        dict without the key 'self'. Pickle the dict and append it to
-        _preregistered tasks.
-        """
-        data = {k: v for k, v in data.items() if k != "self"}
-        self._preregistered_tasks.append(pickle.dumps(data))
-
-    def _init_database(self):
-        """
-        Creates a new database in case that an older one is not existing
-        and in case of missing settings set the settings-default values.
-        """
-        self._create_tables()
-        self._initialize_settings_table()
-
-    def _execute(self, cmd, parameters=()):
-        """
-        Run a command with parameters. Parameters can be a sequence of
-        values to get used in an ordered way or a dictionary with
-        key-value pairs, where the key are the value-names used in the
-        db (i.e. the column names).
-        """
-        con = sqlite3.connect(
-            self.db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        with con:
-            return con.execute(cmd, parameters)
-
-    def _create_tables(self):
-        """
-        Create all used tables in case of a new db and missing tables.
-        """
-        self._execute(CMD_CREATE_TASK_TABLE)
-        self._execute(CMD_CREATE_RESULT_TABLE)
-        self._execute(CMD_CREATE_SETTINGS_TABLE)
-
-
-    def _count_table_rows(self, table_name):
-        """
-        Helper function to count the number of entries in the given
-        table. Returns a numeric value. In case of an unknown table_name
-        a sqlite3.OperationalError will get raised.
-        """
-        cmd = CMD_COUNT_TABLE_ROWS.format(table_name=table_name)
-        cursor = self._execute(cmd)
-        number_of_rows = cursor.fetchone()[0]
-        return number_of_rows
-
-    def _initialize_settings_table(self):
-        """
-        Check for an existing settings row in the settings-table.
-        If there is no row create an entry with the default values.
-        """
-        rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
-        if not rows:
-            data = {"max_workers": 1, "running_workers": 0}
-            self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
 
     # -- task-methods ---
@@ -617,11 +615,3 @@ class SQLiteInterface:
             self.increment_running_workers()
             return True
         return False
-
-
-# TODO: make SQLiteInterface a singleton
-
-interface = SQLiteInterface(db_name=DB_FILE_NAME)
-# on start delete cronjobs from the last run. They may have changed
-# an will reread after deletion here.
-interface.delete_cronjobs()

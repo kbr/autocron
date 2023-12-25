@@ -11,9 +11,12 @@ import sys
 import time
 
 from autocron.schedule import CronScheduler
-from autocron.sql_interface import interface
+from autocron.sql_interface import SQLiteInterface
 
 WORKER_IDLE_TIME = 4.0  # seconds
+
+
+interface = SQLiteInterface()
 
 
 class Worker:

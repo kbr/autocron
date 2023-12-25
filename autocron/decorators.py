@@ -6,11 +6,13 @@ as cron-tasks or to get executed later. After autocron integration to the applic
 import uuid
 
 from .schedule import CronScheduler
-from .sql_interface import interface
+from .sql_interface import SQLiteInterface
 
 
 # run every minute:
 DEFAULT_CRONTAB = "* * * * *"
+
+interface = SQLiteInterface()
 
 
 # pylint: disable=too-many-arguments
