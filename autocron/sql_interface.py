@@ -127,7 +127,9 @@ CMD_CREATE_SETTINGS_TABLE = f"""
 CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
 (
     max_workers INTEGER,
-    running_workers INTEGER
+    running_workers INTEGER,
+    monitor_lock INTEGER,
+    autocron_lock INTEGER
 )
 """
 
@@ -137,16 +139,23 @@ CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
 (
     :max_workers,
-    :running_workers
+    :running_workers,
+    :monitor_lock,
+    :autocron_lock
 )
 """
-SETTINGS_COLUMN_SEQUENCE = "rowid,max_workers,running_workers"
+SETTINGS_COLUMN_SEQUENCE =\
+    "rowid,max_workers,running_workers,"\
+    "monitor_lock,autocron_lock"
+BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
 CMD_SETTINGS_GET_SETTINGS = f"""
     SELECT {SETTINGS_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_SETTINGS}"""
 CMD_SETTINGS_UPDATE = f"""
     UPDATE {DB_TABLE_NAME_SETTINGS} SET
         max_workers = ?,
-        running_workers = ?
+        running_workers = ?,
+        monitor_lock = ?,
+        autocron_lock = ?
     WHERE rowid == ?"""
 
 
@@ -290,7 +299,12 @@ class SQLiteInterface:
         """
         rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
         if not rows:
-            data = {"max_workers": 1, "running_workers": 0}
+            data = {
+                "max_workers": 1,
+                "running_workers": 0,
+                "monitor_lock": 0,
+                "autocron_lock": 0,
+            }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
     def _count_table_rows(self, table_name):
@@ -593,6 +607,8 @@ class SQLiteInterface:
         row = cursor.fetchone()  # there is only one row
         col_names = SETTINGS_COLUMN_SEQUENCE.split(",")
         data = dict(zip(col_names, row))
+        for key in BOOLEAN_SETTINGS:
+            data[key] = bool(data[key])
         return HybridNamespace(data)
 
     def set_settings(self, settings):
@@ -604,6 +620,8 @@ class SQLiteInterface:
         data = (
             settings.max_workers,
             settings.running_workers,
+            int(settings.monitor_lock),
+            int(settings.autocron_lock),
             settings.rowid
         )
         self._execute(CMD_SETTINGS_UPDATE, data)
