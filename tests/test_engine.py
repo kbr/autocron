@@ -52,6 +52,11 @@ class TestEngine(unittest.TestCase):
         # monitor-lock flag should be set now:
         result = self.engine.start(TEST_DB_NAME)
         assert result is False
+        # check direct for the monitor_lock flag:
+        self.assertTrue(self.engine.interface.monitor_lock_flag_is_set)
+        # check for releasing the flag on stop
+        self.engine.stop()
+        self.assertFalse(self.engine.interface.monitor_lock_flag_is_set)
 
 
 class TestAutocronFlagInjection(unittest.TestCase):
