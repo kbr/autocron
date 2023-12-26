@@ -13,12 +13,14 @@ settings: configuration settings for a project
 """
 
 import datetime
+import pathlib
 import pickle
 import sqlite3
 import types
 
 
-DB_FILE_NAME = "autocron.db"
+DEFAULT_STORAGE = ".autocron"
+
 
 # -- table: task - structure and commands ------------------------------------
 DB_TABLE_NAME_TASK = "task"
@@ -316,6 +318,25 @@ class SQLiteInterface:
         with con:
             return con.execute(cmd, parameters)
 
+    def _set_storage_location(self, db_name):
+        """
+        Set the database file location. If the path is absolute use the
+        path as is. The directory part of the path must exist. If the
+        path is relative the database file gets stored in the
+        '~.autocron/' directory. If no home directory is found on the
+        running platform the current working directory is used as a
+        fallback. However in such cases it would be safer to provide an
+        absolute path to the database location.
+        """
+        path = pathlib.Path(db_name)
+        if not path.is_absolute():
+            try:
+                path = pathlib.Path.home() / DEFAULT_STORAGE / path.name
+            except RuntimeError:
+                # no home directory found
+                path = pathlib.Path.cwd() / db_name
+        self.db_name = path
+
     def _preregister_task(self, data):
         """
         Take the data, which is a dictionary,and convert it to another
@@ -333,7 +354,7 @@ class SQLiteInterface:
         initialization.
         """
         if not self.is_initialized:
-            self.db_name = db_name
+            self._set_storage_location(db_name)
             self._init_database()
 
     def register_preregistered_tasks(self):

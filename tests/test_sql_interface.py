@@ -18,6 +18,7 @@ from autocron import worker
 
 
 TEST_DB_NAME = "test.db"
+ANOTHER_FILE_NAME = "another_file_name.db"
 
 
 def test_callable(*args, **kwargs):
@@ -41,6 +42,20 @@ class TestSQLInterface(unittest.TestCase):
     def tearDown(self):
         pathlib.Path(self.interface.db_name).unlink()
         self.interface._result_ttl = self._result_ttl
+
+    def test_storage_location(self):
+        path = pathlib.Path.home() / sql_interface.DEFAULT_STORAGE / TEST_DB_NAME
+        assert self.interface.db_name == path
+        # don't allow setting the db a second time:
+        self.interface.init_database(db_name=ANOTHER_FILE_NAME)
+        assert self.interface.db_name == path
+
+    def test_storage_location_absolute(self):
+        pathlib.Path(self.interface.db_name).unlink()
+        self.interface.db_name = None
+        path = pathlib.Path.cwd() / ANOTHER_FILE_NAME
+        self.interface.init_database(db_name=path)
+        assert self.interface.db_name == path
 
     def test_storage(self):
         entries = self.interface.get_tasks_on_due()
