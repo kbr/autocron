@@ -132,9 +132,7 @@ def _convert_flag(flag):
 def set_monitor_lock(flag):
     """Set monitor_lock flag."""
     flag = _convert_flag(flag)
-    settings = interface.get_settings()
-    settings.monitor_lock = flag
-    interface.set_settings(settings)
+    interface.set_monitor_lock_flag(flag)
     print(f"Set monitor lock to {flag}")
 
 

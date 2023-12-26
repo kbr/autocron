@@ -27,12 +27,12 @@ class TestEngine(unittest.TestCase):
     def setUp(self):
         sql_interface.SQLiteInterface._instance = None
         self.interface = sql_interface.SQLiteInterface()
-        self.interface.init_database(db_name=TEST_DB_NAME)
         self.engine = engine.Engine(interface=self.interface)
 
     def tearDown(self):
         # clean up if tests don't run through
-        pathlib.Path(self.interface.db_name).unlink()
+        if self.interface.db_name:
+            pathlib.Path(self.interface.db_name).unlink()
 
     def test_start_subprocess(self):
         process = engine.start_subprocess()
@@ -42,19 +42,64 @@ class TestEngine(unittest.TestCase):
         time.sleep(0.02)  # give process some time to terminate
         assert process.poll() is not None
 
-    def x_test_is_start_allowed(self):
-
-        # inactive because of refactoring the semaphore handling
-
-        # autocron not active -> no start
-        self.cc.is_active = False
-        self.assertFalse(self.engine.is_start_allowed())
-        # autocron active and already a monitor_thread -> no start
+    def test_start_is_allowed(self):
+        # don't start a thread here:
         self.engine.monitor_thread = "some reference"
-        self.cc.is_active = True
-        self.assertFalse(self.engine.is_start_allowed())
-        # autocron active and not monitor_thread -> start allowed
-        self.engine.monitor_thread = None
-        self.assertTrue(self.engine.is_start_allowed())
+        result = self.engine.start(TEST_DB_NAME)
+        # on default the  autocron- and monitor-lock flags are False:
+        assert result is True
+        # starting a second time should not work because the
+        # monitor-lock flag should be set now:
+        result = self.engine.start(TEST_DB_NAME)
+        assert result is False
 
 
+class TestAutocronFlagInjection(unittest.TestCase):
+
+    def test_new_interface_instance(self):
+        sql_interface.SQLiteInterface._instance = None
+        interface1 = sql_interface.SQLiteInterface()
+        interface2 = sql_interface.SQLiteInterface()
+        assert interface1 is interface2
+        sql_interface.SQLiteInterface._instance = None
+        interface3 = sql_interface.SQLiteInterface()
+        assert interface1 is not interface3
+
+    def test_injection(self):
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+        assert self.interface.autocron_lock_is_set is False
+        settings = self.interface.get_settings()
+        settings.autocron_lock = True
+        self.interface.set_settings(settings)
+        # get new instance with existing db
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+        assert self.interface.autocron_lock_is_set is True
+        pathlib.Path(self.interface.db_name).unlink()
+
+
+class TestAutocronFlag(unittest.TestCase):
+
+    def setUp(self):
+        # create self.interface twice to inject the autocron-flag:
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+        settings = self.interface.get_settings()
+        settings.autocron_lock = True
+        self.interface.set_settings(settings)
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.engine = engine.Engine(interface=self.interface)
+
+    def tearDown(self):
+        # clean up if tests don't run through
+        pathlib.Path(self.interface.db_name).unlink()
+
+    def test_autocron_flag(self):
+        self.engine.monitor_thread = "some reference"
+        result = self.engine.start(TEST_DB_NAME)
+        assert result is False

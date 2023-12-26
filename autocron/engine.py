@@ -109,6 +109,8 @@ class Engine:
         if self.monitor_thread:  # and self.monitor_thread.is_alive():
             self.exit_event.set()
             self.monitor_thread = None
+            # TODO: adapt this for multiple workers!
+            # (should better be done in the monitor thread)
             self.interface.decrement_running_workers()
 
     def _terminate(self, signalnum, stackframe=None):
