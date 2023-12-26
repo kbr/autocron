@@ -120,6 +120,33 @@ def set_max_workers(workers):
     print(f"Set max_workers to {workers}")
 
 
+def _convert_flag(flag):
+    """
+    flag can be a string with 'true'', 'false' or 'on'', 'off''.
+    Returns a boolean.
+    """
+    flag = flag.lower()
+    return flag == "true" or flag == "on"
+
+
+def set_monitor_lock(flag):
+    """Set monitor_lock flag."""
+    flag = _convert_flag(flag)
+    settings = interface.get_settings()
+    settings.monitor_lock = flag
+    interface.set_settings(settings)
+    print(f"Set monitor lock to {flag}")
+
+
+def set_autocron_lock(flag):
+    """Set autocron_lock flag."""
+    flag = _convert_flag(flag)
+    settings = interface.get_settings()
+    settings.autocron_lock = flag
+    interface.set_settings(settings)
+    print(f"Set autocron lock to {flag}")
+
+
 def delete_database():
     """
     Delete the database and create the database again with the default
@@ -177,14 +204,12 @@ def get_command_line_arguments():
     parser.add_argument(
         "--set-monitor-lock",
         dest="monitor_lock",
-        type=int,
-        help="set monitor lock flag: 1|0 (True|False)."
+        help="set monitor lock flag: [true|false or on|off]."
     )
     parser.add_argument(
         "--set-autocron-lock",
         dest="autocron_lock",
-        type=int,
-        help="set autocron lock flag: 1|0 (True|False)."
+        help="set autocron lock flag: [true|false or on|off]."
     )
     parser.add_argument(
         "-t", "--get-tasks",
@@ -234,6 +259,10 @@ def main(args=None):
         report_results()
     elif args.delete_database:
         delete_database()
+    elif args.monitor_lock:
+        set_monitor_lock(args.monitor_lock)
+    elif args.autocron_lock:
+        set_autocron_lock(args.autocron_lock)
     else:
         print_usage()
 
