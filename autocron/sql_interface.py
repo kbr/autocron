@@ -271,8 +271,17 @@ class SQLiteInterface:
     def __init__(self):
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
-        self.accept_registrations = True
+        self._accept_registrations = True
+        self.autocron_lock_is_set = None
         self.db_name = None
+
+    @property
+    def accept_registrations(self):
+        return self._accept_registrations and not self.autocron_lock_is_set
+
+    @accept_registrations.setter
+    def accept_registrations(self, value):
+        self._accept_registrations = value
 
     @property
     def is_initialized(self):
@@ -286,6 +295,8 @@ class SQLiteInterface:
         """
         self._create_tables()
         self._initialize_settings_table()
+        settings = self.get_settings()
+        self.autocron_lock_is_set = settings.autocron_lock
 
     def _create_tables(self):
         """
@@ -628,6 +639,21 @@ class SQLiteInterface:
             settings.rowid
         )
         self._execute(CMD_SETTINGS_UPDATE, data)
+
+    @property
+    def monitor_lock_flag_is_set(self):
+        """
+        Returns the status of the monitor-lock flag..
+        """
+        return self.get_settings().monitor_lock
+
+    def set_monitor_lock_flag(self, value):
+        """
+        Set monitor_lock flag to the given state.
+        """
+        settings = self.get_settings()
+        settings.monitor_lock = value
+        self.set_settings(settings)
 
     def increment_running_workers(self):
         """

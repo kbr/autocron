@@ -75,21 +75,28 @@ class Engine:
         start the engine, a project-name is required. The project-name
         represents the name of the directory in '~/.autocron' where
         project-specific data are stored (like the database).
+        Returns a boolean: True if a monitor-thread has been started and
+        False otherwise. Returning False does not mean that no monitor
+        is running. There could be a monitor-thread in another process
+        that has started earlier.
         """
         self.interface.init_database(database_file)
-        # TODO: test for semaphore flag in db
-        # if not set, set it
-        # then start the monitor (see below)
-        # otherwise don't start the engine.
+        if (
+            self.interface.autocron_lock_is_set
+            or self.interface.monitor_lock_flag_is_set
+        ):
+            # in both cases start is not allowed
+            return False
+        self.interface.set_monitor_lock_flag(True)
         if not self.monitor_thread:
-            # TODO: for multiprocessing check database first for
-            # a semaphore indicating an already running monitor.
-            # start monitor thread
+            # this is a safety check for not starting more than
+            # one monitor thread (however, this condition should not happen)
             self.monitor_thread = threading.Thread(
                 target=start_worker_monitor,
                 args=(self.exit_event, database_file)
             )
             self.monitor_thread.start()
+        return True
 
     def stop(self):
         """
