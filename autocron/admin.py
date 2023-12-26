@@ -8,7 +8,10 @@ import argparse
 
 from autocron.sql_interface import (
     SQLiteInterface,
-    MAX_WORKERS_DEFAULT,
+    DEFAULT_MAX_WORKERS,
+    DEFAULT_RUNNING_WORKERS,
+    DEFAULT_MONITOR_LOCK,
+    DEFAULT_AUTOCRON_LOCK,
 )
 
 interface = SQLiteInterface()
@@ -100,8 +103,10 @@ def print_usage():
 def reset_defaults():
     """Reset the settings with the default values."""
     settings = interface.get_settings()
-    settings.max_workers = MAX_WORKERS_DEFAULT
-    settings.running_workers = 0
+    settings.max_workers = DEFAULT_MAX_WORKERS
+    settings.running_workers = DEFAULT_RUNNING_WORKERS
+    settings.monitor_lock = DEFAULT_MONITOR_LOCK
+    settings.autocron_lock = DEFAULT_AUTOCRON_LOCK
     interface.set_settings(settings)
     print("\nReset settings default values:")
     report_info()
@@ -146,20 +151,21 @@ def get_command_line_arguments():
     parser.add_argument(
         "-i", "--info",
         action="store_true",
-        help="provide information about the settings, number of waiting tasks "\
+        help="provide information about the settings, number of waiting tasks "
              "and result entries."
     )
     parser.add_argument(
         "--reset-defaults",
         dest="reset_defaults",
         action="store_true",
-        help="restore the default settings: max_workers=1, running_workers=0."
+        help="restore the default settings: max_workers=1, running_workers=0, "
+             "monitor_lock=0, autocron_lock=0."
     )
     parser.add_argument(
         "--delete-database",
         dest="delete_database",
         action="store_true",
-        help="delete the current database and create a new clean one with "\
+        help="delete the current database and create a new clean one with "
              "the default settings."
     )
     parser.add_argument(
@@ -167,6 +173,18 @@ def get_command_line_arguments():
         dest="max_workers",
         type=int,
         help="set number of maximum worker processes."
+    )
+    parser.add_argument(
+        "--set-monitor-lock",
+        dest="monitor_lock",
+        type=int,
+        help="set monitor lock flag: 1|0 (True|False)."
+    )
+    parser.add_argument(
+        "--set-autocron-lock",
+        dest="autocron_lock",
+        type=int,
+        help="set autocron lock flag: 1|0 (True|False)."
     )
     parser.add_argument(
         "-t", "--get-tasks",

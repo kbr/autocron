@@ -133,7 +133,10 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
 )
 """
 
-MAX_WORKERS_DEFAULT = 1
+DEFAULT_MAX_WORKERS = 1
+DEFAULT_RUNNING_WORKERS = 0
+DEFAULT_MONITOR_LOCK = 0
+DEFAULT_AUTOCRON_LOCK = 0
 
 CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
@@ -300,10 +303,10 @@ class SQLiteInterface:
         rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
         if not rows:
             data = {
-                "max_workers": 1,
-                "running_workers": 0,
-                "monitor_lock": 0,
-                "autocron_lock": 0,
+                "max_workers": DEFAULT_MAX_WORKERS,
+                "running_workers": DEFAULT_RUNNING_WORKERS,
+                "monitor_lock": DEFAULT_MONITOR_LOCK,
+                "autocron_lock": DEFAULT_AUTOCRON_LOCK,
             }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 

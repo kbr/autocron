@@ -330,8 +330,8 @@ class TestSQLInterface(unittest.TestCase):
         self.interface._initialize_settings_table()
         assert get_rows() == 1
         settings = self.interface.get_settings()
-        assert settings.max_workers == sql_interface.MAX_WORKERS_DEFAULT
-        new_max_workers = sql_interface.MAX_WORKERS_DEFAULT + 1
+        assert settings.max_workers == sql_interface.DEFAULT_MAX_WORKERS
+        new_max_workers = sql_interface.DEFAULT_MAX_WORKERS + 1
         settings.max_workers = new_max_workers
         self.interface.set_settings(settings)
         # value of max_workers should have changed
