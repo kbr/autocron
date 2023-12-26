@@ -7,9 +7,11 @@ Administration tool to access the database.
 import argparse
 
 from autocron.sql_interface import (
-    interface,
+    SQLiteInterface,
     MAX_WORKERS_DEFAULT,
 )
+
+interface = SQLiteInterface()
 
 
 PGM_NAME = "autocron command line tool"
@@ -135,6 +137,11 @@ def get_command_line_arguments():
     parser = argparse.ArgumentParser(
         prog=PGM_NAME,
         description=PGM_DESCRIPTION,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "database",
+        help="database name or path."
     )
     parser.add_argument(
         "-i", "--info",
@@ -192,6 +199,7 @@ def main(args=None):
     """entry point."""
     if not args:
         args = get_command_line_arguments()
+    interface.init_database(args.database)
     if args.info:
         report_info()
     elif args.reset_defaults:
