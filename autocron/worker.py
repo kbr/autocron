@@ -5,7 +5,6 @@ worker class for handling cron and delegated tasks.
 """
 
 import importlib
-import os
 import signal
 import sys
 import time
@@ -13,10 +12,8 @@ import time
 from autocron.schedule import CronScheduler
 from autocron.sql_interface import SQLiteInterface
 
+
 WORKER_IDLE_TIME = 4.0  # seconds
-
-
-interface = SQLiteInterface()
 
 
 class Worker:
@@ -24,16 +21,18 @@ class Worker:
     Runs in a separate process for task-handling.
     Gets supervised and monitored from the engine.
     """
-    def __init__(self):
+    def __init__(self, database_filename):
         self.active = True
         self.result = None
         self.error_message = None
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
+        self.interface = SQLiteInterface()
+        self.interface.init_database(db_name=database_filename)
         # prevent delay-decorated function to register itself again
         # when called as task.
         # (this is save because the worker runs in its own process)
-        interface.accept_registrations = False
+        self.interface.accept_registrations = False
 
     def terminate(self, *args):  # pylint: disable=unused-argument
         """
@@ -50,7 +49,7 @@ class Worker:
         while self.active:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
-                interface.delete_outdated_results()
+                self.interface.delete_outdated_results()
                 time.sleep(WORKER_IDLE_TIME)
 
     def handle_tasks(self):
@@ -61,7 +60,7 @@ class Worker:
         method return `True` to indicate that meanwhile more tasks may be
         waiting.
         """
-        tasks = interface.get_tasks_on_due()
+        tasks = self.interface.get_tasks_on_due()
         if tasks:
             for task in tasks:
                 if self.active is False:
@@ -105,7 +104,7 @@ class Worker:
         """
         if task.uuid:
             # if the task has a uuid, store the result / error-message
-            interface.update_result(
+            self.interface.update_result(
                 uuid=task.uuid,
                 result=self.result,
                 error_message=self.error_message
@@ -115,17 +114,17 @@ class Worker:
             # and update the task-entry
             scheduler = CronScheduler(crontab=task.crontab)
             schedule = scheduler.get_next_schedule()
-            interface.update_schedule(rowid=task.rowid, schedule=schedule)
+            self.interface.update_schedule(rowid=task.rowid, schedule=schedule)
         else:
             # not a cronjob: delete the task from the db
-            interface.delete_callable(task)
+            self.interface.delete_callable(task)
 
 
 def start_worker():
     """subprocess entry-point"""
-    # insert cwd of hosting application to pythonpath
-    sys.path.insert(0, os.getcwd())
-    worker = Worker()
+    # engine provides the database name as first argument:
+    database_filename = sys.argv[1]
+    worker = Worker(database_filename)
     worker.run()
 
 

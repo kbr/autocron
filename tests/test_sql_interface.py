@@ -443,16 +443,12 @@ class TestDelayDecorator(unittest.TestCase):
         sql_interface.SQLiteInterface._instance = None
         self.interface = sql_interface.SQLiteInterface()
         self.interface.init_database(db_name=TEST_DB_NAME)
-
         self.orig_decorator_interface = decorators.interface
         decorators.interface = self.interface
-        self.orig_worker_interface = worker.interface
-        worker.interface = self.interface
 
     def tearDown(self):
         pathlib.Path(self.interface.db_name).unlink()
         decorators.interface = self.orig_decorator_interface
-        worker.interface = self.orig_worker_interface
 
     def _activate(self):
         self.interface.accept_registrations = True
@@ -500,29 +496,25 @@ class TestDelayDecorator(unittest.TestCase):
 
         # 2: a single entry is now in both tables:
         time.sleep(0.001)  # have some patience with the db.
-        task_entries = decorators.interface.get_tasks_by_signature(test_adder)
+        task_entries = self.interface.get_tasks_by_signature(test_adder)
         assert len(task_entries) == 1
-        result = decorators.interface.get_result_by_uuid(uuid_)
+        result = self.interface.get_result_by_uuid(uuid_)
         assert result is not None
         assert result.is_waiting is True
 
         # 3: let the worker handle the task:
         # instanciate but don't start the worker
-        # this will set interface.accept_registrations to False, because the
-        # worker will run in a separate process.
-        # This is important as otherwise calling the task will not execute
-        # the task but registering the task again by the wrapper.
-        worker_ = worker.Worker()
+        worker_ = worker.Worker(self.interface.db_name)
         # return True if at least one task has handled:
         return_value = worker_.handle_tasks()
         assert return_value is True
         time.sleep(0.001)  # have some patience with the db.
         # after handling the task should be removed from the db:
-        task_entries = decorators.interface.get_tasks_by_signature(test_adder)
+        task_entries = self.interface.get_tasks_by_signature(test_adder)
         assert len(task_entries) == 0
 
         # 4: check whether the worker has updated the result entry in the db:
-        result = decorators.interface.get_result_by_uuid(uuid_)
+        result = self.interface.get_result_by_uuid(uuid_)
         assert result.is_ready is True
         assert result.result == 42  # 40 + 2
 
