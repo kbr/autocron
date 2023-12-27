@@ -129,7 +129,9 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
     max_workers INTEGER,
     running_workers INTEGER,
     monitor_lock INTEGER,
-    autocron_lock INTEGER
+    autocron_lock INTEGER,
+    monitor_idle_time REAL,
+    worker_idle_time REAL
 )
 """
 
@@ -137,6 +139,8 @@ DEFAULT_MAX_WORKERS = 1
 DEFAULT_RUNNING_WORKERS = 0
 DEFAULT_MONITOR_LOCK = 0
 DEFAULT_AUTOCRON_LOCK = 0
+DEFAULT_MONITOR_IDLE_TIME = 5.0  # seconds
+DEFAULT_WORKER_IDLE_TIME = 2.0  # seconds
 
 CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
@@ -144,12 +148,14 @@ INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
     :max_workers,
     :running_workers,
     :monitor_lock,
-    :autocron_lock
+    :autocron_lock,
+    :monitor_idle_time,
+    :worker_idle_time
 )
 """
 SETTINGS_COLUMN_SEQUENCE =\
     "rowid,max_workers,running_workers,"\
-    "monitor_lock,autocron_lock"
+    "monitor_lock,autocron_lock,monitor_idle_time,worker_idle_time"
 BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
 CMD_SETTINGS_GET_SETTINGS = f"""
     SELECT {SETTINGS_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_SETTINGS}"""
@@ -158,7 +164,9 @@ CMD_SETTINGS_UPDATE = f"""
         max_workers = ?,
         running_workers = ?,
         monitor_lock = ?,
-        autocron_lock = ?
+        autocron_lock = ?,
+        monitor_idle_time = ?,
+        worker_idle_time = ?
     WHERE rowid == ?"""
 
 
@@ -318,6 +326,8 @@ class SQLiteInterface:
                 "running_workers": DEFAULT_RUNNING_WORKERS,
                 "monitor_lock": DEFAULT_MONITOR_LOCK,
                 "autocron_lock": DEFAULT_AUTOCRON_LOCK,
+                "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
+                "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
             }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
@@ -636,9 +646,14 @@ class SQLiteInterface:
             settings.running_workers,
             int(settings.monitor_lock),
             int(settings.autocron_lock),
+            settings.monitor_idle_time,
+            settings.worker_idle_time,
             settings.rowid
         )
         self._execute(CMD_SETTINGS_UPDATE, data)
+
+    def get_monitor_idle_time(self):
+        return self.get_settings().monitor_idle_time
 
     @property
     def monitor_lock_flag_is_set(self):

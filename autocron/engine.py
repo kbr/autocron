@@ -13,7 +13,6 @@ import threading
 from .sql_interface import SQLiteInterface
 
 
-MONITOR_IDLE_TIME = 2.0  # seconds
 WORKER_MODULE_NAME = "worker.py"
 
 
@@ -36,10 +35,13 @@ def start_worker_monitor(exit_event, database_file=None):
     Monitors the subprocess and start/restart if the process is not up.
     """
     process = None
+    interface = SQLiteInterface()
+    interface.init_database(database_file)
     while True:
         if process is None or process.poll() is not None:
             process = start_subprocess(database_file)
-        if exit_event.wait(timeout=MONITOR_IDLE_TIME):
+        idle_time = interface.get_monitor_idle_time()
+        if exit_event.wait(timeout=idle_time):
             break
     # got exit event: terminate worker
     # running_worker decrement is triggered in the stop() method
