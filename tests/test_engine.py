@@ -2,21 +2,17 @@
 test_engine.py
 
 tests for the engine and the worker.
-
-The configuration sets a flag `is_active`. If this flag is True the
-engine should start a monitor-thread. The monitor-thread then starts the
-worker process. On terminating the engine sets a threading event to
-terminate the monitor-thread and the monitor thread should shut down the
-worker process.
 """
 
 import pathlib
 import subprocess
+import sys
 import time
 import unittest
 
 from autocron import engine
 from autocron import sql_interface
+from autocron import worker
 
 
 TEST_DB_NAME = "test.db"
@@ -108,3 +104,17 @@ class TestAutocronFlag(unittest.TestCase):
         self.engine.monitor_thread = "some reference"
         result = self.engine.start(TEST_DB_NAME)
         assert result is False
+
+
+class TestWorkerStartStop(unittest.TestCase):
+
+    def setUp(self):
+        self.cmd = [sys.executable, worker.__file__]
+        self.cwd = pathlib.Path.cwd()
+
+    def test_start_and_stop_workerprocess(self):
+        process = subprocess.Popen(self.cmd, cwd=self.cwd)
+        assert process.poll() is None  # subprocess runs
+        process.terminate()
+        time.sleep(0.1)
+        assert process.poll() is not None
