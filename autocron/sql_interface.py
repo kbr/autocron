@@ -131,7 +131,8 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
     monitor_lock INTEGER,
     autocron_lock INTEGER,
     monitor_idle_time REAL,
-    worker_idle_time REAL
+    worker_idle_time REAL,
+    worker_pids TEXT
 )
 """
 
@@ -141,6 +142,7 @@ DEFAULT_MONITOR_LOCK = 0
 DEFAULT_AUTOCRON_LOCK = 0
 DEFAULT_MONITOR_IDLE_TIME = 5.0  # seconds
 DEFAULT_WORKER_IDLE_TIME = 2.0  # seconds
+DEFAULT_WORKER_PIDS = ""
 
 CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
@@ -150,12 +152,15 @@ INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
     :monitor_lock,
     :autocron_lock,
     :monitor_idle_time,
-    :worker_idle_time
+    :worker_idle_time,
+    :worker_pids
 )
 """
 SETTINGS_COLUMN_SEQUENCE =\
     "rowid,max_workers,running_workers,"\
-    "monitor_lock,autocron_lock,monitor_idle_time,worker_idle_time"
+    "monitor_lock,autocron_lock,"\
+    "monitor_idle_time,worker_idle_time,"\
+    "worker_pids"
 BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
 CMD_SETTINGS_GET_SETTINGS = f"""
     SELECT {SETTINGS_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_SETTINGS}"""
@@ -166,7 +171,8 @@ CMD_SETTINGS_UPDATE = f"""
         monitor_lock = ?,
         autocron_lock = ?,
         monitor_idle_time = ?,
-        worker_idle_time = ?
+        worker_idle_time = ?,
+        worker_pids = ?
     WHERE rowid == ?"""
 
 
@@ -328,6 +334,7 @@ class SQLiteInterface:
                 "autocron_lock": DEFAULT_AUTOCRON_LOCK,
                 "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
                 "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
+                "worker_pids": DEFAULT_WORKER_PIDS,
             }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
@@ -648,6 +655,7 @@ class SQLiteInterface:
             int(settings.autocron_lock),
             settings.monitor_idle_time,
             settings.worker_idle_time,
+            settings.worker_pids,
             settings.rowid
         )
         self._execute(CMD_SETTINGS_UPDATE, data)
@@ -670,7 +678,7 @@ class SQLiteInterface:
         settings.monitor_lock = value
         self.set_settings(settings)
 
-    def increment_running_workers(self):
+    def increment_running_workers(self, pid):
         """
         Increment the running_worker setting by 1.
         """
@@ -687,14 +695,3 @@ class SQLiteInterface:
         if settings.running_workers > 0:
             settings.running_workers -= 1
             self.set_settings(settings)
-
-    def try_increment_running_workers(self):
-        """
-        Increment the running_worker with a test whether it is allowed
-        or not. Returns True on success else False.
-        """
-        settings = self.get_settings()
-        if settings.running_workers < settings.max_workers:
-            self.increment_running_workers()
-            return True
-        return False
