@@ -683,15 +683,32 @@ class SQLiteInterface:
         Increment the running_worker setting by 1.
         """
         settings = self.get_settings()
+        if settings.worker_pids:
+            pids = settings.worker_pids.split(",")
+        else:
+            pids = []
+        pids.append(str(pid))
+        settings.worker_pids = ",".join(pids)
         settings.running_workers += 1
         self.set_settings(settings)
 
-    def decrement_running_workers(self):
+    def decrement_running_workers(self, pid):
         """
         Decrement the running_worker setting by 1.
         But don't allow a value below zero.
         """
         settings = self.get_settings()
-        if settings.running_workers > 0:
+        if settings.worker_pids:
+            pids = settings.worker_pids.split(",")
+        else:
+            pids = []
+        try:
+            pids.remove(str(pid))
+        except ValueError:
+            # can happen when decrement gets called before increment
+            # otherwise it is a weird error that should not happen
+            pass
+        else:
+            settings.worker_pids = ",".join(pids)
             settings.running_workers -= 1
             self.set_settings(settings)

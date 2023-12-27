@@ -346,25 +346,28 @@ class TestSQLInterface(unittest.TestCase):
         the_settings = self.interface.get_settings()
         assert the_settings.max_workers == new_max_workers
 
-#     def test_increment_running_workers(self):
-#         settings = self.interface.get_settings()
-#         running_workers = settings.running_workers
-#         self.interface.increment_running_workers()
-#         settings = self.interface.get_settings()
-#         assert running_workers == settings.running_workers - 1
+    def test_worker_settings(self):
+        # increment and decrement worker_pids in the settings
 
-    def test_decrement_running_workers(self):
-        settings = self.interface.get_settings()
-        settings.running_workers = 1
-        self.interface.set_settings(settings)
-        self.interface.decrement_running_workers()
-        settings = self.interface.get_settings()
-        assert settings.running_workers == 0
-        # second decrement should not go below zero
-        self.interface.decrement_running_workers()
-        settings = self.interface.get_settings()
-        assert settings.running_workers == 0
+        def check_settings():
+            settings = self.interface.get_settings()
+            assert settings.running_workers == len(test_pids)
+            text = ",".join(map(str, test_pids))
+            assert settings.worker_pids == text
 
+        # register pids
+        test_pids = [42, 377, 42980]
+        for pid in test_pids:
+            self.interface.increment_running_workers(pid)
+        check_settings()
+        # remove a single one
+        pid = test_pids.pop(1)
+        self.interface.decrement_running_workers(pid)
+        check_settings()
+        # remove the remaining ones
+        while test_pids:
+            self.interface.decrement_running_workers(test_pids.pop())
+        check_settings()
 
 # decorator testing includes database access.
 # for easier testing decorator tests are included here.

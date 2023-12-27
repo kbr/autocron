@@ -113,7 +113,7 @@ class Engine:
             self.monitor_thread = None
             # TODO: adapt this for multiple workers!
             # (should better be done in the monitor thread)
-            self.interface.decrement_running_workers()
+            # self.interface.decrement_running_workers()
             self.interface.set_monitor_lock_flag(False)
 
     def _terminate(self, signalnum, stackframe=None):
