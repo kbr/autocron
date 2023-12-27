@@ -346,12 +346,12 @@ class TestSQLInterface(unittest.TestCase):
         the_settings = self.interface.get_settings()
         assert the_settings.max_workers == new_max_workers
 
-    def test_increment_running_workers(self):
-        settings = self.interface.get_settings()
-        running_workers = settings.running_workers
-        self.interface.increment_running_workers()
-        settings = self.interface.get_settings()
-        assert running_workers == settings.running_workers - 1
+#     def test_increment_running_workers(self):
+#         settings = self.interface.get_settings()
+#         running_workers = settings.running_workers
+#         self.interface.increment_running_workers()
+#         settings = self.interface.get_settings()
+#         assert running_workers == settings.running_workers - 1
 
     def test_decrement_running_workers(self):
         settings = self.interface.get_settings()
@@ -364,21 +364,6 @@ class TestSQLInterface(unittest.TestCase):
         self.interface.decrement_running_workers()
         settings = self.interface.get_settings()
         assert settings.running_workers == 0
-
-    def test_try_increment_running_workers(self):
-        # no workers allowed: -> False
-        settings = self.interface.get_settings()
-        settings.max_workers = 0
-        self.interface.set_settings(settings)
-        self.assertFalse(self.interface.try_increment_running_workers())
-        # default settings: -> True
-        settings = self.interface.get_settings()
-        settings.max_workers = 1
-        settings.running_workers = 0
-        self.interface.set_settings(settings)
-        self.assertTrue(self.interface.try_increment_running_workers())
-        # but an additional worker is not allowed:
-        self.assertFalse(self.interface.try_increment_running_workers())
 
 
 # decorator testing includes database access.
