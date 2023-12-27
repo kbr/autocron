@@ -56,6 +56,11 @@ class TestEngine(unittest.TestCase):
 
 
 class TestAutocronFlagInjection(unittest.TestCase):
+    """
+    Test that the autocron_lock flag from the settings is readable by
+    the SQLiteInterface. Also test whether SQLiteInterface indeed
+    behaves like a singleton.
+    """
 
     def test_new_interface_instance(self):
         sql_interface.SQLiteInterface._instance = None
@@ -83,6 +88,10 @@ class TestAutocronFlagInjection(unittest.TestCase):
 
 
 class TestAutocronFlag(unittest.TestCase):
+    """
+    Injects the autocron_lock flag set to True in the database: the
+    engine should not start.
+    """
 
     def setUp(self):
         # create self.interface twice to inject the autocron-flag:
@@ -109,8 +118,16 @@ class TestAutocronFlag(unittest.TestCase):
 class TestWorkerStartStop(unittest.TestCase):
 
     def setUp(self):
-        self.cmd = [sys.executable, worker.__file__]
+        sql_interface.SQLiteInterface._instance = None
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+        self.cmd = [sys.executable, worker.__file__, self.interface.db_name]
         self.cwd = pathlib.Path.cwd()
+
+    def tearDown(self):
+        # clean up if tests don't run through
+        if self.interface.db_name:
+            pathlib.Path(self.interface.db_name).unlink()
 
     def test_start_and_stop_workerprocess(self):
         process = subprocess.Popen(self.cmd, cwd=self.cwd)
@@ -118,3 +135,4 @@ class TestWorkerStartStop(unittest.TestCase):
         process.terminate()
         time.sleep(0.1)
         assert process.poll() is not None
+
