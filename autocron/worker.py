@@ -5,6 +5,7 @@ worker class for handling cron and delegated tasks.
 """
 
 import importlib
+import os
 import signal
 import sys
 import time
@@ -46,11 +47,14 @@ class Worker:
         Main event loop for the worker. Takes callables and processes
         them as long as callables are available. Otherwise keep idle.
         """
+        pid = os.getpid()
+        self.interface.increment_running_workers(pid)
         while self.active:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-                time.sleep(WORKER_IDLE_TIME)
+                time.sleep(self.interface.get_worker_idle_time())
+        self.interface.decrement_running_workers(pid)
 
     def handle_tasks(self):
         """

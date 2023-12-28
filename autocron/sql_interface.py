@@ -16,6 +16,7 @@ import datetime
 import pathlib
 import pickle
 import sqlite3
+import time
 import types
 
 
@@ -662,6 +663,12 @@ class SQLiteInterface:
 
     def get_monitor_idle_time(self):
         return self.get_settings().monitor_idle_time
+
+    def get_worker_idle_time(self):
+        return self.get_settings().worker_idle_time
+
+    def get_max_workers(self):
+        return self.get_settings().max_workers
 
     @property
     def monitor_lock_flag_is_set(self):

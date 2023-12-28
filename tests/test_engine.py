@@ -7,7 +7,9 @@ tests for the engine and the worker.
 import pathlib
 import subprocess
 import sys
+import threading
 import time
+import warnings
 import unittest
 
 from autocron import engine
@@ -118,11 +120,19 @@ class TestAutocronFlag(unittest.TestCase):
 class TestWorkerStartStop(unittest.TestCase):
 
     def setUp(self):
+        # set worker_idle_time to a low value
+        self._worker_idle_time = 0.01
+        self._monitor_idle_time = 0.01
         sql_interface.SQLiteInterface._instance = None
         self.interface = sql_interface.SQLiteInterface()
         self.interface.init_database(db_name=TEST_DB_NAME)
+        settings = self.interface.get_settings()
+        settings.worker_idle_time = self._worker_idle_time
+        settings.worker_idle_time = self._monitor_idle_time
+        self.interface.set_settings(settings)
         self.cmd = [sys.executable, worker.__file__, self.interface.db_name]
         self.cwd = pathlib.Path.cwd()
+        warnings.simplefilter("ignore", ResourceWarning)
 
     def tearDown(self):
         # clean up if tests don't run through
@@ -133,6 +143,5 @@ class TestWorkerStartStop(unittest.TestCase):
         process = subprocess.Popen(self.cmd, cwd=self.cwd)
         assert process.poll() is None  # subprocess runs
         process.terminate()
-        time.sleep(0.1)
+        time.sleep(self._worker_idle_time * 2)
         assert process.poll() is not None
-
