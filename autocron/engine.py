@@ -9,12 +9,14 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from types import SimpleNamespace
 
 from .sql_interface import SQLiteInterface
 
 
 WORKER_MODULE_NAME = "worker.py"
+WORKER_START_DELAY = 0.2
 
 
 def start_subprocess(database_file=None):
@@ -29,25 +31,6 @@ def start_subprocess(database_file=None):
         cmd.append(database_file)
     cwd = pathlib.Path.cwd()
     return subprocess.Popen(cmd, cwd=cwd)
-
-
-def start_worker_monitor(exit_event, database_file=None):
-    """
-    Monitors the subprocess and start/restart if the process is not up.
-    """
-    process = None
-    interface = SQLiteInterface()
-    interface.init_database(database_file)
-    while True:
-        if process is None or process.poll() is not None:
-            process = start_subprocess(database_file)
-        idle_time = interface.get_monitor_idle_time()
-        if exit_event.wait(timeout=idle_time):
-            break
-    # got exit event: terminate worker
-    # running_worker decrement is triggered in the stop() method
-    # (which is the termination handler registered in the main thread)
-    process.terminate()
 
 
 def run_worker_monitor(exit_event, database_file):
@@ -65,6 +48,11 @@ def run_worker_monitor(exit_event, database_file):
     for _ in range(max_workers):
         process = start_subprocess(database_file)
         processes.append(SimpleNamespace(pid=process.pid, process=process))
+        # don't start multiple workers too fast one after the other
+        # because they may run into a sqlite write-lock. This will not cause
+        # a wrong behaviour on starting, monitoring and stopping the workers
+        # but can lead to a wrong statistic in the autocron admin/setting.
+        time.sleep(WORKER_START_DELAY)
     while True:
         for entry in processes:
             if entry.process.poll() is not None:
@@ -96,7 +84,7 @@ class Engine:
     # pylint: disable=redefined-outer-name
     def __init__(self, interface=None):
         self.interface = interface if interface else SQLiteInterface()
-        self.exit_event = threading.Event()
+        self.exit_event = None
         self.monitor_thread = None
         self.original_handlers = {
             signalnum: signal.signal(signalnum, self._terminate)
@@ -123,11 +111,12 @@ class Engine:
             # in both cases start is not allowed
             return False
         self.interface.set_monitor_lock_flag(True)
+        # this is a safety check for not starting more than
+        # one monitor thread:
         if not self.monitor_thread:
-            # this is a safety check for not starting more than
-            # one monitor thread (however, this condition should not happen)
+            self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(
-                target=start_worker_monitor,
+                target=run_worker_monitor,
                 args=(self.exit_event, database_file)
             )
             self.monitor_thread.start()
@@ -135,22 +124,19 @@ class Engine:
 
     def stop(self):
         """
-        Shut down monitor thread and release semaphore file. `args`
-        collect arguments provided because the method is a
-        signal-handler. The arguments are the signal number and the
-        current stack frame, that could be None or a frame object. To
-        shut down, both arguments are ignored.
+        Shut down the monitor thread which in turn will stop all running
+        workers. Also release the monitor_lock flag.
         """
-        if self.monitor_thread:  # and self.monitor_thread.is_alive():
-            self.exit_event.set()
+        if self.monitor_thread:
+            # check for self.exit_event for a test-scenario.
+            # in production if self.monitor_thread is not None
+            # self.exit_event is also not None
+            if self.exit_event:
+                self.exit_event.set()
             self.monitor_thread = None
-            # TODO: adapt this for multiple workers!
-            # (should better be done in the monitor thread)
-            # self.interface.decrement_running_workers()
             self.interface.set_monitor_lock_flag(False)
 
     def _terminate(self, signalnum, stackframe=None):
-
         """
         Terminate autocron by calling the engine.stop method. Afterward
         reraise the signal again for the original signal-handler.
