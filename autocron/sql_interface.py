@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_TASK}
 (
     uuid TEXT,
     schedule datetime PRIMARY KEY,
+    status INTEGER,
     crontab TEXT,
     function_module TEXT,
     function_name TEXT,
@@ -41,6 +42,7 @@ INSERT INTO {DB_TABLE_NAME_TASK} VALUES
 (
     :uuid,
     :schedule,
+    :status,
     :crontab,
     :function_module,
     :function_name,
@@ -48,17 +50,21 @@ INSERT INTO {DB_TABLE_NAME_TASK} VALUES
 )
 """
 TASK_COLUMN_SEQUENCE =\
-    "rowid,uuid,schedule,crontab,"\
+    "rowid,uuid,schedule,status,crontab,"\
     "function_module,function_name,function_arguments"
-CMD_GET_TASKS_BY_NAME = f"""\
+CMD_GET_TASKS_BY_NAME =f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}
     WHERE function_module == ? AND function_name == ?"""
-CMD_GET_TASKS_ON_DUE = f"""\
-    SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK} WHERE schedule <= ?"""
-CMD_GET_TASKS = f"""\
+CMD_GET_TASKS_ON_DUE = f"""
+    SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}
+    WHERE schedule <= ?"""
+CMD_GET_TASKS_ON_DUE_WITH_STATUS = CMD_GET_TASKS_ON_DUE + " AND status == ?"
+CMD_GET_TASKS = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}"""
-CMD_UPDATE_SCHEDULE = f"\
-    UPDATE {DB_TABLE_NAME_TASK} SET schedule = ? WHERE rowid == ?"
+CMD_UPDATE_TASK_STATUS = f"""
+    UPDATE {DB_TABLE_NAME_TASK} SET status = ? WHERE schedule <= """
+CMD_UPDATE_SCHEDULE = f"""
+    UPDATE {DB_TABLE_NAME_TASK} SET schedule = ? WHERE rowid == ?"""
 CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
 CMD_DELETE_CRON_TASKS = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE crontab <> ''"
 CMD_COUNT_TABLE_ROWS = "SELECT COUNT(*) FROM {table_name}"
@@ -80,10 +86,11 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_RESULT}
 )
 """
 
-# Status codes are needed for the result-entries:
-TASK_STATUS_WAITING = 0
-TASK_STATUS_READY = 1
-TASK_STATUS_ERROR = 3
+# Status codes are needed for task-status the result-entries:
+TASK_STATUS_WAITING = 1
+TASK_STATUS_PROCESSING = 2
+TASK_STATUS_READY = 3
+TASK_STATUS_ERROR = 4
 
 # Storage time (time to live) for results in seconds
 RESULT_TTL = 1800
@@ -104,8 +111,9 @@ INSERT INTO {DB_TABLE_NAME_RESULT} VALUES
 RESULT_COLUMN_SEQUENCE =\
     "rowid,uuid,status,function_module,function_name,"\
     "function_arguments,function_result,error_message, ttl"
-CMD_GET_RESULTS = f"SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}"
-CMD_GET_RESULT_BY_UUID = f"""\
+CMD_GET_RESULTS = f"""
+    SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}"""
+CMD_GET_RESULT_BY_UUID = f"""
     SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}
     WHERE uuid == ?"""
 CMD_UPDATE_RESULT = f"""
@@ -117,7 +125,7 @@ CMD_UPDATE_RESULT = f"""
     WHERE uuid == ?"""
 # CMD_DELETE_RESULT = f"""\
 #     DELETE FROM {DB_TABLE_NAME_RESULT} WHERE uuid == ?"""
-CMD_DELETE_OUTDATED_RESULTS = f"""\
+CMD_DELETE_OUTDATED_RESULTS = f"""
     DELETE FROM {DB_TABLE_NAME_RESULT}
     WHERE status == {TASK_STATUS_READY} AND ttl <= ?"""
 
@@ -459,6 +467,7 @@ class SQLiteInterface:
         func,
         uuid="",
         schedule=None,
+        status=TASK_STATUS_WAITING,
         crontab="",
         args=(),
         kwargs=None,
@@ -467,7 +476,7 @@ class SQLiteInterface:
         """
         Store a callable in the task-table of the database. If the
         argument `unique` is given, don't register a callable twice. In
-        this case an allready registered callable with the same
+        this case an already registered callable with the same
         signature (module.name) gets overwritten. This can be useful for
         cron-tasks to not register them multiple times.
         """
@@ -484,6 +493,7 @@ class SQLiteInterface:
             data = {
                 "uuid": uuid,
                 "schedule": schedule,
+                "status": status,
                 "crontab": crontab,
                 "function_module": func.__module__,
                 "function_name": func.__name__,
@@ -501,13 +511,24 @@ class SQLiteInterface:
         cursor = self._execute(CMD_GET_TASKS)
         return self._fetch_all_callable_entries(cursor)
 
-    def get_tasks_on_due(self, schedule=None):
+    def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
         """
-        Returns tasks on due as a list of HybridNamespace instances.
+        Returns tasks on due as a list of HybridNamespace instances. If
+        'status' is given the status is also used for the selection. If
+        'new_status' is given the selection gets updated with the new
+        status.
         """
         if not schedule:
             schedule = datetime.datetime.now()
-        cursor = self._execute(CMD_GET_TASKS_ON_DUE, [schedule])
+        if status:
+            cursor = self._execute(
+                CMD_GET_TASKS_ON_DUE_WITH_STATUS,
+                [schedule, status]
+            )
+        else:
+            cursor = self._execute(CMD_GET_TASKS_ON_DUE, [schedule])
+        if new_status:
+            cursor.executemany(CMD_UPDATE_TASK_STATUS, [schedule, new_status])
         return self._fetch_all_callable_entries(cursor)
 
     def get_tasks_by_signature(self, func):
