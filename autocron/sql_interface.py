@@ -7,9 +7,6 @@ The autocron database consists of three tables:
 task: stores all tasks that should get executed later
 result: stores all results from task returning a result
 settings: configuration settings for a project
-
-
-
 """
 
 import datetime
@@ -69,6 +66,12 @@ CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
 CMD_DELETE_CRON_TASKS = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE crontab <> ''"
 CMD_COUNT_TABLE_ROWS = "SELECT COUNT(*) FROM {table_name}"
 
+# Status codes used for task-status the result-entries:
+TASK_STATUS_WAITING = 1
+TASK_STATUS_PROCESSING = 2
+TASK_STATUS_READY = 3
+TASK_STATUS_ERROR = 4
+
 
 # -- table: result - structure and commands ----------------------------------
 DB_TABLE_NAME_RESULT = "result"
@@ -85,12 +88,6 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_RESULT}
     ttl datetime
 )
 """
-
-# Status codes are needed for task-status the result-entries:
-TASK_STATUS_WAITING = 1
-TASK_STATUS_PROCESSING = 2
-TASK_STATUS_READY = 3
-TASK_STATUS_ERROR = 4
 
 # Storage time (time to live) for results in seconds
 RESULT_TTL = 1800
@@ -282,6 +279,7 @@ class TaskResult(HybridNamespace):
 class SQLiteInterface:
     """
     SQLite interface for application specific operations.
+    This class is a Singleton.
     """
 
     _instance = None
@@ -433,6 +431,7 @@ class SQLiteInterface:
                 "rowid": integer,
                 "uuid": string,
                 "schedule": datetime,
+                "status": integer,
                 "crontab": string,
                 "function_module": string,
                 "function_name": string,
@@ -459,6 +458,7 @@ class SQLiteInterface:
             data["args"] = args
             data["kwargs"] = kwargs
             return HybridNamespace(data)
+
         return [process(row) for row in cursor.fetchall()]
 
     # pylint: disable=too-many-arguments
@@ -654,6 +654,11 @@ class SQLiteInterface:
         Returns a HybridNamespace instance with the settings as attributes:
         - max_workers
         - running_workers
+        - monitor_lock
+        - autocron_lock
+        - monitor_idle_time
+        - worker_idle_time
+        - worker_pids
         - rowid (not a setting but included)
         """
         cursor = self._execute(CMD_SETTINGS_GET_SETTINGS)
