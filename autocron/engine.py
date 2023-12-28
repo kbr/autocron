@@ -19,11 +19,11 @@ WORKER_MODULE_NAME = "worker.py"
 WORKER_START_DELAY = 0.2
 
 
-def start_subprocess(database_file=None):
+def start_subprocess(database_file):
     """
-    Starts the worker process in a detached subprocess.
-    An optional `database_file` will get forwarded to the worker to use
-    this instead of the configured one. This argument is for testing.
+    Starts the worker process in a detached subprocess. The
+    `database_file` is a string with an absolute or relative path to the
+    database in use.
     """
     worker_file = pathlib.Path(__file__).parent / WORKER_MODULE_NAME
     cmd = [sys.executable, worker_file]
@@ -37,8 +37,10 @@ def run_worker_monitor(exit_event, database_file):
     """
     Starts the worker processes and monitors that the workers are up and
     running. Restart workers if necessary. This function must run in a
-    separate thread. The 'exit_event' threading.Event instance. If
-    received the workers are terminated and the function will return,
+    separate thread. The 'exit_event' is a threading.Event() instance
+    and the `database_file` is a string with an absolute or relative
+    path to the database in use. If the monitor receives an exit_event
+    the running workers are terminated and the function will return,
     terminating its own thread as well.
     """
     processes = []
@@ -72,17 +74,14 @@ def run_worker_monitor(exit_event, database_file):
 
 class Engine:
     """
-    The Engine is the entry-point for autocron. On import an Entry
-    instance gets created and the method start is called.
-    TODO: this is no longer true. The engine must get started explicitly.
-
-    Depending on
-    the configuration will start the worker-monitor and the background
-    process. If the (auto-)configuration is not active, the method start
-    will just return doing nothing.
+    The Engine is the entry-point for autocron. In the ``__init__.py``
+    module an instance of Engine gets created for calling the
+    ``start()`` method to start the monitor thread. The monitor-thread
+    will start the workers.
     """
-    # pylint: disable=redefined-outer-name
     def __init__(self, interface=None):
+        # the ìnterface argument is for testing. In production this
+        # argument is not provided for initialization.
         self.interface = interface if interface else SQLiteInterface()
         self.exit_event = None
         self.monitor_thread = None
