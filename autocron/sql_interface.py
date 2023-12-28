@@ -26,7 +26,7 @@ CMD_CREATE_TASK_TABLE = f"""
 CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_TASK}
 (
     uuid TEXT,
-    schedule datetime PRIMARY KEY,
+    schedule datetime,
     status INTEGER,
     crontab TEXT,
     function_module TEXT,
@@ -59,7 +59,7 @@ CMD_GET_TASKS_ON_DUE_WITH_STATUS = CMD_GET_TASKS_ON_DUE + " AND status == ?"
 CMD_GET_TASKS = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}"""
 CMD_UPDATE_TASK_STATUS = f"""
-    UPDATE {DB_TABLE_NAME_TASK} SET status = ? WHERE schedule <= """
+    UPDATE {DB_TABLE_NAME_TASK} SET status = ? WHERE rowid == ?"""
 CMD_UPDATE_SCHEDULE = f"""
     UPDATE {DB_TABLE_NAME_TASK} SET schedule = ? WHERE rowid == ?"""
 CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
@@ -356,18 +356,21 @@ class SQLiteInterface:
         number_of_rows = cursor.fetchone()[0]
         return number_of_rows
 
-    def _execute(self, cmd, parameters=()):
+    def _execute(self, cmd, parameters=(), many=False):
         """
         Run a command with parameters. Parameters can be a sequence of
         values to get used in an ordered way or a dictionary with
         key-value pairs, where the key are the value-names used in the
         db (i.e. the column names).
+        If 'many' is true then con.executemany() gets called and parameters is interpreted differently as as sequence of ordered tuples or dictionaries as placehoöders for the provided cmd.
         """
         con = sqlite3.connect(
             self.db_name,
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         with con:
+            if many:
+                return con.executemany(cmd, parameters)
             return con.execute(cmd, parameters)
 
     def _set_storage_location(self, db_name):
@@ -527,9 +530,11 @@ class SQLiteInterface:
             )
         else:
             cursor = self._execute(CMD_GET_TASKS_ON_DUE, [schedule])
-        if new_status:
-            cursor.executemany(CMD_UPDATE_TASK_STATUS, [schedule, new_status])
-        return self._fetch_all_callable_entries(cursor)
+        tasks = self._fetch_all_callable_entries(cursor)
+        if new_status and tasks:
+            values = [(new_status, task.rowid) for task in tasks]
+            self._execute(CMD_UPDATE_TASK_STATUS, values, many=True)
+        return tasks
 
     def get_tasks_by_signature(self, func):
         """

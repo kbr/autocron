@@ -153,6 +153,28 @@ class TestSQLInterface(unittest.TestCase):
         entries = list(self.interface.get_tasks_by_signature(test_adder))
         assert len(entries) == 2
 
+    def test_get_task_on_due_and_set_status(self):
+        # set two task which are on due with status WAITING (default).
+        # Select them by setting the status to PROCESSED.
+        # A second selection should not work.
+        schedule = datetime.datetime.now() - datetime.timedelta(seconds=10)
+        self.interface.register_callable(test_adder, schedule=schedule)
+        self.interface.register_callable(test_adder, schedule=schedule)
+        entries = self.interface.get_tasks_on_due(
+            status=sql_interface.TASK_STATUS_WAITING,
+            new_status=sql_interface.TASK_STATUS_PROCESSING
+        )
+        assert len(entries) == 2
+        # do this a second time should not work
+        entries = self.interface.get_tasks_on_due(
+            status=sql_interface.TASK_STATUS_WAITING,
+            new_status=sql_interface.TASK_STATUS_PROCESSING
+        )
+        assert len(entries) == 0
+        # but the two entries are still there:
+        entries = self.interface.get_tasks()
+        assert len(entries) == 2
+
     def test_update_schedule(self):
         # entries like cronjobs should not get deleted from the tasks
         # but updated with the next schedule
