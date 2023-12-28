@@ -33,7 +33,7 @@ class TestEngine(unittest.TestCase):
             pathlib.Path(self.interface.db_name).unlink()
 
     def test_start_subprocess(self):
-        process = engine.start_subprocess()
+        process = engine.start_subprocess(self.interface.db_name)
         assert isinstance(process, subprocess.Popen) is True
         assert process.poll() is None
         process.terminate()

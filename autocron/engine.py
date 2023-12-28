@@ -1,7 +1,10 @@
 """
-engine.py
+The Engine is the entry-point for autocron.
 
-Implementation of the autocron engine and the worker monitor.
+To use the Engine create an instance and call ``.start(filename)`` on
+this instance with the database filename to use as argument. The
+function ``start(filename)`` in the ``__init__.py`` module of autocron
+handles this.
 """
 
 import pathlib
@@ -58,13 +61,15 @@ def run_worker_monitor(exit_event, database_file):
     while True:
         for entry in processes:
             if entry.process.poll() is not None:
-                # trouble: process is not running any more
+                # trouble: process is not running any more.
                 # deregister the terminated process from the setting
-                # and start a new process
+                # and start a new process.
                 interface.decrement_running_workers(entry.pid)
                 new_process = start_subprocess(database_file)
                 entry.pid = new_process.pid
                 entry.process = new_process
+                # in case more than one process needs a restart:
+                time.sleep(WORKER_START_DELAY)
         idle_time = interface.get_monitor_idle_time()
         if exit_event.wait(timeout=idle_time):
             break
@@ -85,10 +90,23 @@ class Engine:
         self.interface = interface if interface else SQLiteInterface()
         self.exit_event = None
         self.monitor_thread = None
-        self.original_handlers = {
-            signalnum: signal.signal(signalnum, self._terminate)
-            for signalnum in (signal.SIGINT, signal.SIGTERM)
-        }
+        self.orig_signal_handlers = {}
+
+    def set_signal_handlers(self):
+        """
+        Set self._terminate() as handler for a couple of
+        termination-signals and store the orinal handlers for this
+        signals.
+        """
+        signalnums = [
+            signal.SIGINT,
+            signal.SIGTERM,
+            signal.SIGABRT,
+            signal.SIGHUP,  # availablity: Unix
+        ]
+        for signalnum in signalnums:
+            self.orig_signal_handlers[signalnum] = signal.getsignal(signalnum)
+            signal.signal(signalnum, self._terminate)
 
     def start(self, database_file):
         """
@@ -113,6 +131,7 @@ class Engine:
         # this is a safety check for not starting more than
         # one monitor thread:
         if not self.monitor_thread:
+            self.set_signal_handlers()
             self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(
                 target=run_worker_monitor,
@@ -143,5 +162,5 @@ class Engine:
         # stackframe may be given to the signal-handler, but is unused
         # pylint: disable=unused-argument
         self.stop()
-        signal.signal(signalnum, self.original_handlers[signalnum])
+        signal.signal(signalnum, self.orig_signal_handlers[signalnum])
         signal.raise_signal(signalnum)  # requires Python >= 3.8
