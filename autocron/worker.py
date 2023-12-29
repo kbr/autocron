@@ -11,7 +11,7 @@ import sys
 import time
 
 from autocron.schedule import CronScheduler
-from autocron.sql_interface import SQLiteInterface
+from autocron import sql_interface
 
 
 WORKER_IDLE_TIME = 4.0  # seconds
@@ -28,7 +28,7 @@ class Worker:
         self.error_message = None
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
-        self.interface = SQLiteInterface()
+        self.interface = sql_interface.SQLiteInterface()
         self.interface.init_database(db_name=database_filename)
         # prevent delay-decorated function to register itself again
         # when called as task.
@@ -64,7 +64,9 @@ class Worker:
         method return `True` to indicate that meanwhile more tasks may be
         waiting.
         """
-        tasks = self.interface.get_tasks_on_due()
+        tasks = self.interface.get_tasks_on_due(
+            new_status=sql_interface.TASK_STATUS_PROCESSING
+        )
         if tasks:
             for task in tasks:
                 if self.active is False:
@@ -118,7 +120,10 @@ class Worker:
             # and update the task-entry
             scheduler = CronScheduler(crontab=task.crontab)
             schedule = scheduler.get_next_schedule()
-            self.interface.update_schedule(rowid=task.rowid, schedule=schedule)
+            self.interface.update_crontask_schedule(
+                rowid=task.rowid,
+                schedule=schedule
+            )
         else:
             # not a cronjob: delete the task from the db
             self.interface.delete_callable(task)

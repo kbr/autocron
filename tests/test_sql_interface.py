@@ -183,9 +183,36 @@ class TestSQLInterface(unittest.TestCase):
         self.interface.register_callable(test_adder, schedule=schedule)
         entry = self.interface.get_tasks_by_signature(test_adder)[0]
         assert entry["schedule"] == schedule
-        self.interface.update_schedule(entry["rowid"], next_schedule)
+        self.interface.update_crontask_schedule(entry["rowid"], next_schedule)
         entry = self.interface.get_tasks_by_signature(test_adder)[0]
         assert entry["schedule"] == next_schedule
+
+    def test_update_crontask(self):
+        """
+        When a crontask is selected for handling because it is 'on due',
+        the status changes from WAITING to PROCESSING. After
+        task-handling and schedule update the status must get reset to
+        WAITING.
+        """
+        # after adding a crontask the task is in WAITING state:
+        self.interface.register_callable(test_adder)
+        task = self.interface.get_tasks_by_signature(test_adder)[0]
+        assert task.status == sql_interface.TASK_STATUS_WAITING
+        # after retrieving on due, the state changes to PROCESSING
+        # for the returned task-object and also for the stored task-object:
+        task = self.interface.get_tasks_on_due(
+            new_status=sql_interface.TASK_STATUS_PROCESSING
+        )[0]
+        assert task.status == sql_interface.TASK_STATUS_PROCESSING
+        task = self.interface.get_tasks_by_signature(test_adder)[0]
+        assert task.status == sql_interface.TASK_STATUS_PROCESSING
+        # after calling update_crontask_schedule() the status must
+        # get reset to WAITING again:
+        schedule = datetime.datetime.now()
+        rowid = task.rowid
+        self.interface.update_crontask_schedule(rowid, schedule)
+        task = self.interface.get_tasks_by_signature(test_adder)[0]
+        assert task.status == sql_interface.TASK_STATUS_WAITING
 
     def test_result_by_uuid_no_result(self):
         # result should be None if no entry found

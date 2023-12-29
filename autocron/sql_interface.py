@@ -60,8 +60,8 @@ CMD_GET_TASKS = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}"""
 CMD_UPDATE_TASK_STATUS = f"""
     UPDATE {DB_TABLE_NAME_TASK} SET status = ? WHERE rowid == ?"""
-CMD_UPDATE_SCHEDULE = f"""
-    UPDATE {DB_TABLE_NAME_TASK} SET schedule = ? WHERE rowid == ?"""
+CMD_UPDATE_CRONTASK_SCHEDULE = f"""
+    UPDATE {DB_TABLE_NAME_TASK} SET schedule = ?, status = ? WHERE rowid == ?"""
 CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
 CMD_DELETE_CRON_TASKS = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE crontab <> ''"
 CMD_COUNT_TABLE_ROWS = "SELECT COUNT(*) FROM {table_name}"
@@ -534,6 +534,9 @@ class SQLiteInterface:
         if new_status and tasks:
             values = [(new_status, task.rowid) for task in tasks]
             self._execute(CMD_UPDATE_TASK_STATUS, values, many=True)
+            # also update the status in the previous fetched tasks:
+            for task in tasks:
+                task.status = new_status
         return tasks
 
     def get_tasks_by_signature(self, func):
@@ -559,12 +562,13 @@ class SQLiteInterface:
         """
         self._execute(CMD_DELETE_CRON_TASKS)
 
-    def update_schedule(self, rowid, schedule):
+    def update_crontask_schedule(self, rowid, schedule):
         """
         Update the `schedule` of the table entry with the given `rowid`.
+        As this should be a crontask the status is set to WAITING.
         """
-        parameters = schedule, rowid
-        self._execute(CMD_UPDATE_SCHEDULE, parameters)
+        parameters = schedule, TASK_STATUS_WAITING, rowid
+        self._execute(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
     def count_tasks(self):
         """
