@@ -722,7 +722,7 @@ class SQLiteInterface:
 
     def increment_running_workers(self, pid):
         """
-        Increment the running_worker setting by 1.
+        Increment the running_worker-setting by 1.
         """
         settings = self.get_settings()
         if settings.worker_pids:
@@ -736,7 +736,7 @@ class SQLiteInterface:
 
     def decrement_running_workers(self, pid):
         """
-        Decrement the running_worker setting by 1.
+        Decrement the running_worker-setting by 1.
         But don't allow a value below zero.
         """
         settings = self.get_settings()
