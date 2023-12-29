@@ -1,6 +1,7 @@
 """
 **autocron** provides two decorators as external API to mark functions
-as cron-tasks or to get executed later. After autocron integration to the application this is all that's needed to run:
+as cron-tasks or to get executed later. After autocron integration to
+the application this is all that's needed to run:
 """
 
 import uuid

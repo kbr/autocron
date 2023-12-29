@@ -1,6 +1,6 @@
 
-External API
-============
+Decorators
+==========
 
 
 .. automodule:: autocron.decorators
