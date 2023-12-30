@@ -751,6 +751,7 @@ class SQLiteInterface:
             # otherwise it is a weird error that should not happen
             pass
         else:
+            if settings.running_workers > 0:
+                settings.running_workers -= 1
             settings.worker_pids = ",".join(pids)
-            settings.running_workers -= 1
             self.set_settings(settings)

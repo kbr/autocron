@@ -1,7 +1,6 @@
 """
 **autocron** provides two decorators as external API to mark functions
-as cron-tasks or to get executed later. After autocron integration to
-the application this is all that's needed to run:
+as cron-tasks or to get executed later.
 """
 
 import uuid
@@ -36,7 +35,7 @@ def cron(crontab=None,
     argument `crontab` is given then all other arguments are ignored. To
     use the other arguments instead, provide them all as
     keyword-arguments. If no arguments are given the default-crontab
-    ``(* * * * *)`` is used to execute a tsak every minute.
+    ``(* * * * *)`` is used to execute a task every minute.
 
     :crontab:
         a string representing a valid crontab. See:

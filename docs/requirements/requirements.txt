@@ -4,11 +4,11 @@
 #
 #    pip-compile --strip-extras docs/requirements/requirements.in
 #
+-e file:///Users/klaus/Documents/dev/git/autocron
+    # via -r docs/requirements/requirements.in
 alabaster==0.7.13
     # via sphinx
-autocron==0.4.dev0
-    # via -r docs/requirements/requirements.in
-babel==2.13.1
+babel==2.14.0
     # via sphinx
 beautifulsoup4==4.12.2
     # via furo
