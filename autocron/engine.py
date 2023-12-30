@@ -152,7 +152,13 @@ class Engine:
             if self.exit_event:
                 self.exit_event.set()
             self.monitor_thread = None
-            self.interface.set_monitor_lock_flag(False)
+            settings = self.interface.get_settings()
+            settings.monitor_lock = False
+            # in case of a crash the workers will terminate but
+            # may not reliable reset their states. So do it here:
+            settings.running_workers = 0
+            settings.worker_pids = ""
+            self.interface.set_settings(settings)
 
     def _terminate(self, signalnum, stackframe=None):
         """
