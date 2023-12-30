@@ -399,8 +399,15 @@ class SQLiteInterface:
         _preregistered tasks.
         """
         data = {k: v for k, v in data.items() if k != "self"}
-        self._preregistered_tasks.append(pickle.dumps(data))
+        self._preregistered_tasks.append(data)
 
+    def register_preregistered_tasks(self):
+        """
+        Run the stored registrations on the now up and
+        running database.
+        """
+        for data in self._preregistered_tasks:
+            self.register_callable(**data)
 
     def init_database(self, db_name):
         """
@@ -411,15 +418,6 @@ class SQLiteInterface:
         if not self.is_initialized:
             self._set_storage_location(db_name)
             self._init_database()
-
-    def register_preregistered_tasks(self):
-        """
-        Run the stored registrations on the now up and
-        running database.
-        """
-        for task in self._preregistered_tasks:
-            data = pickle.loads(task)
-            self.register_callable(**data)
 
 
     # -- task-methods ---
@@ -472,7 +470,7 @@ class SQLiteInterface:
         schedule=None,
         status=TASK_STATUS_WAITING,
         crontab="",
-        args=(),
+        args=None,
         kwargs=None,
         unique=False,
     ):
@@ -490,7 +488,9 @@ class SQLiteInterface:
                     self.delete_callable(task)
             if not schedule:
                 schedule = datetime.datetime.now()
-            if not kwargs:
+            if args is None:
+                args = ()
+            if kwargs is None:
                 kwargs = {}
             arguments = pickle.dumps((args, kwargs))
             data = {
