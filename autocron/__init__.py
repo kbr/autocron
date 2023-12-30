@@ -12,7 +12,7 @@ from .engine import Engine
 
 
 __all__ = ["cron", "delay", "start", "stop"]
-__version__ = "0.7.1.dev"
+__version__ = "0.7.2.dev"
 
 _engine = Engine()
 
