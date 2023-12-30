@@ -362,7 +362,9 @@ class SQLiteInterface:
         values to get used in an ordered way or a dictionary with
         key-value pairs, where the key are the value-names used in the
         db (i.e. the column names).
-        If 'many' is true then con.executemany() gets called and parameters is interpreted differently as as sequence of ordered tuples or dictionaries as placehoöders for the provided cmd.
+        If 'many' is true then con.executemany() gets called and
+        parameters is interpreted differently as as sequence of ordered
+        tuples or dictionaries as placehoöders for the provided cmd.
         """
         con = sqlite3.connect(
             self.db_name,

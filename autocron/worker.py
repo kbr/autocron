@@ -65,6 +65,7 @@ class Worker:
         waiting.
         """
         tasks = self.interface.get_tasks_on_due(
+            status=sql_interface.TASK_STATUS_WAITING,
             new_status=sql_interface.TASK_STATUS_PROCESSING
         )
         if tasks:
@@ -131,6 +132,8 @@ class Worker:
 
 def start_worker():
     """subprocess entry-point"""
+    # insert cwd of hosting application to pythonpath
+    sys.path.insert(0, os.getcwd())
     # engine provides the database name as first argument:
     database_filename = sys.argv[1]
     worker = Worker(database_filename)
