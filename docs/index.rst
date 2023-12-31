@@ -39,6 +39,10 @@ Usage
         # don't wait for the mailserver and delegate this
         # or any other long running task to a background process
 
+A ``cron`` decorated function should not return a result and also should not get called from the application. Also ``cron`` accepts keyword arguments instead of a cron-formated string.
+
+If a ``delay`` decorated function returns a result, this result is unchanged in case that autocron is not active. If autocron is active the decorated function will return a unique identifier (type ``uuid``) instead. This identifier allows to access the result at a later time.
+
 
 Integration
 -----------
@@ -48,10 +52,60 @@ To make the decorators work **autocron** must get started somehow. This happens 
     import autocron
     autocron.start("project.db")
 
-where "project.db" is the name of the database-file that get used as a message storage. How to do this depends on the used framework.
+where "project.db" is the name of the database-file that is used as a message storage. How to do this depends on the used framework. autocron provides also a ``stop()`` method to shut down running background processes. This method gets triggered on application shutdown and it is not required to call this method explicitly.
+
+By default the database-file is stored in the ``~.autocron/`` directory. This directory will get created if it does not exist. If the filename represents an absolute path, then this location is used. The path must be valide and existing.
+
 
 django
 ......
+
+Let's consider a django-application that makes use of the ``cron`` and ``delay`` decorators: ::
+
+    import time
+    import autocron
+
+    from django.http import HttpResponse
+
+    @autocron.delay
+    def do_this_later():
+        """example for a blocking task."""
+        time.sleep(2)
+        print("\ndo this later")
+
+    @autocron.cron("* * * * *")
+    def cronjob():
+        """do something every minute"""
+        print("action from the cron job")
+
+    def index(request):
+        """view providing the response without delay."""
+        uuid = do_this_later()
+        return HttpResponse(f"Hello, world. uuid: {uuid}")
+
+To activate autocron in a django-project the proper way to do this is in the ``apps.py`` module of one of the django-applications. Consider the name ``djangoapp`` for one of these applications, then the content of the corresponding ``apps.py`` module may look like: ::
+
+    import autocron
+    from django.apps import AppConfig
+
+    class DjangoappConfig(AppConfig):
+        default_auto_field = 'django.db.models.BigAutoField'
+        name = 'djangoapp'
+
+        def ready(self):
+            autocron.start("the_django_app.db")
+
+Here autocron is imported and the ``autocron.start()`` function is called in the ```ready()``-method. The advantage of using the ``ready()``-method is that when django itself executes this method, all django-settings are initialized. This helps to activate autocron depending on the django ``DEBUG`` settings: ::
+
+    from django.contrib import settings
+
+    ...
+
+        def ready(self):
+            if not settings.DEBUG:
+                autocron.start("the_django_app.db")
+
+Keep in mind to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called.
 
 
 flask
