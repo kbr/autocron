@@ -505,6 +505,8 @@ class SQLiteInterface:
                 "function_arguments": arguments,
             }
             self._execute(CMD_STORE_TASK, data)
+            if uuid:
+                self.register_result(func, uuid, args=args, kwargs=kwargs)
         else:
             self._preregister_task(locals())
 

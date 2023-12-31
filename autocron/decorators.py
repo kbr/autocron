@@ -129,7 +129,6 @@ def delay(func):
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
-            interface.register_result(func, **data)
             return uid
         return func(*args, **kwargs)
     return wrapper
