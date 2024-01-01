@@ -41,7 +41,7 @@ Usage
 
 A ``cron`` decorated function should not return a result and also should not get called from the application. Also ``cron`` accepts keyword arguments like ``minutes`` and ``hours`` instead of a cron-formated string.
 
-If a ``delay`` decorated function returns a result, this result is unchanged in case that autocron is not active. If autocron is active the decorated function will return a unique identifier (type ``uuid``) instead. This identifier allows to access the result at a later time.
+A ``delay`` decorated function returns a ``TaskResult`` instance as result, no matter whether autocron is active or not. A ``TaskResult`` instance provides attributes like ``is_ready`` which is a ``boolean`` indicating whether a result is available. In this case the function result is accessible by ``TaskResult.result``. In case the result should get ignored it is safe to ignore the returned ``TaskResult`` instance. autocon deletes outdated results from time to time from the database.
 
 **Activate and deactivate:** for development web-frameworks provide debug-settings in one or the other way. For debugging it is often desired to not run background processes at the same time. autocron provides a global flag whether to start or not. This can be set by the autocron-admin tool. After installing autocron the admin-tool is available from the command line as the ``autocron`` command: ::
 
@@ -107,7 +107,7 @@ Keep in mind to register the django-application in the ``INSTALLED_APPS`` settin
 flask
 .....
 
-
+For ``flask`` autocron must get imported and started somewhere. In following example ``autocron.start()`` is called at the end of the module: ::
 
     import time
     import autocron
@@ -115,16 +115,14 @@ flask
 
     app = Flask(__name__)
 
-
     @autocron.cron("* * * * *")
     def cronjob():
         """do something from time to time"""
         print("action from the cron job")
 
-
     @autocron.delay
     def do_this_later():
-        time.sleep(3)
+        time.sleep(2)
         print("\ndo this later")
 
     @app.route("/")
@@ -134,6 +132,12 @@ flask
         return tr.uuid
 
     autocron.start("the_flask_app.db")
+
+But it would also work if autocron gets started right at the beginning of the module like: ::
+
+    app = Flask(__name__)
+    autocron.start("the_flask_app.db")
+
 
 
 .. note::
