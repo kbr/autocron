@@ -109,6 +109,33 @@ flask
 
 
 
+    import time
+    import autocron
+    from flask import Flask
+
+    app = Flask(__name__)
+
+
+    @autocron.cron("* * * * *")
+    def cronjob():
+        """do something from time to time"""
+        print("action from the cron job")
+
+
+    @autocron.delay
+    def do_this_later():
+        time.sleep(3)
+        print("\ndo this later")
+
+    @app.route("/")
+    def hello_world():
+        print("in hello_world")
+        tr = do_this_later()
+        return tr.uuid
+
+    autocron.start("the_flask_app.db")
+
+
 .. note::
    **autocron** is the successor of `autotask <https://github.com/kbr/autotask>`_  which was introduced in 2016 as a django-application to replace Celery on a given project for making monitoring and maintenance easier. Since then it has been used in production without any flaws (at least none has popped up in the used project). But it has had strong roots in Python 2, needed improvements for django >= 3.0 and was also bound to the django ORM for message handling. All this should be removed in an update. Also there is another (unrelated) tool named "autotask" out there in the wild. Therefore the rewrite and renaming.
 
