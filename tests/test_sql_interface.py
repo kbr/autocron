@@ -16,6 +16,8 @@ from autocron import decorators
 from autocron import sql_interface
 from autocron import worker
 
+from autocron.sql_interface import TaskResult
+
 
 TEST_DB_NAME = "test.db"
 ANOTHER_FILE_NAME = "another_file_name.db"
@@ -499,7 +501,9 @@ class TestDelayDecorator(unittest.TestCase):
         # the task in the db.
         self._deactivate()
         wrapper = decorators.delay(delay_function)
-        assert wrapper() == 42
+        task_result = wrapper()
+        assert isinstance(task_result, TaskResult) is True
+        assert task_result.result == 42
         # activate so that get_tasks_by_signature() works
         self._activate()
         entries = self.interface.get_tasks_by_signature(delay_function)
@@ -508,9 +512,7 @@ class TestDelayDecorator(unittest.TestCase):
     def test_active(self):
         wrapper = decorators.delay(delay_function)
         wrapper_return_value = wrapper()
-        assert wrapper_return_value != 42
-        assert isinstance(wrapper_return_value, str) is True  # return uuid as string
-        assert len(wrapper_return_value) == 32  # length of a uuid.hex string
+        assert isinstance(wrapper_return_value, TaskResult) is True
         entries = self.interface.get_tasks_by_signature(delay_function)
         assert len(entries) == 1
 
@@ -519,8 +521,8 @@ class TestDelayDecorator(unittest.TestCase):
         Test story:
 
         1. wrap a function with the delay decorator.
-           This should return a uuid.
-        2. Check for task entry in db.
+           This should return a TaskResult.
+        2. Check for the task entry in db.
         3. Then call `Worker.handle_tasks` what should return True.
         4. Then call `interface.get_result_by_uuid` which should return
            a TaskResult instance with the correct result.
@@ -528,14 +530,16 @@ class TestDelayDecorator(unittest.TestCase):
         """
         # 1: wrap function and call the wrapper with arguments
         wrapper = decorators.delay(test_adder)
-        uuid_ = wrapper(40, 2)
-        assert uuid_ is not None
+        task_result = wrapper(40, 2)
+        assert task_result.uuid is not None
+        assert isinstance(task_result.uuid, str)
 
         # 2: a single entry is now in both tables:
         time.sleep(0.001)  # have some patience with the db.
         task_entries = self.interface.get_tasks_by_signature(test_adder)
         assert len(task_entries) == 1
-        result = self.interface.get_result_by_uuid(uuid_)
+        # result is also of type TaskResult()
+        result = self.interface.get_result_by_uuid(task_result.uuid)
         assert result is not None
         assert result.is_waiting is True
 
@@ -551,7 +555,7 @@ class TestDelayDecorator(unittest.TestCase):
         assert len(task_entries) == 0
 
         # 4: check whether the worker has updated the result entry in the db:
-        result = self.interface.get_result_by_uuid(uuid_)
+        result = self.interface.get_result_by_uuid(task_result.uuid)
         assert result.is_ready is True
         assert result.result == 42  # 40 + 2
 
@@ -581,6 +585,30 @@ class TestHybridNamespace(unittest.TestCase):
         assert self.attr_dict.pi == self.data["pi"]
         assert self.attr_dict["answer"] == self.data["answer"]
         assert self.attr_dict.answer == self.data["answer"]
+
+
+def task_result_function(a, b, c="c", d="d"):
+    return "".join([a, b, c, d])
+
+
+class TestTaskResult(unittest.TestCase):
+
+    def test_task_result_from_function_call(self):
+        args = ("a", "b")
+        tr = sql_interface.TaskResult.from_function_call(
+            task_result_function,
+            *args
+        )
+        assert tr.status == sql_interface.TASK_STATUS_READY
+        assert tr.result == "abcd"
+        args = ("e", "f")
+        kwargs = {"c": "g", "d": "h"}
+        tr = sql_interface.TaskResult.from_function_call(
+            task_result_function,
+            *args,
+            **kwargs
+        )
+        assert tr.result == "efgh"
 
 
 class TestDelayedInitialization(unittest.TestCase):

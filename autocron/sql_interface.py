@@ -71,6 +71,7 @@ TASK_STATUS_WAITING = 1
 TASK_STATUS_PROCESSING = 2
 TASK_STATUS_READY = 3
 TASK_STATUS_ERROR = 4
+TASK_STATUS_UNAVAILABLE = 5
 
 
 # -- table: result - structure and commands ----------------------------------
@@ -274,6 +275,51 @@ class TaskResult(HybridNamespace):
         instance.function_result = pickle.loads(instance.function_result)
         instance.function_arguments = pickle.loads(instance.function_arguments)
         return instance
+
+    @classmethod
+    def from_function_call(cls, func, *args, **kwargs):
+        """
+        Renturns a new TaskResult-Instance with the result from the
+        given function executed with the given arguments. This exists
+        for type consistency to return a TaskResult from delay-decorated
+        functions even if autotask is inactive.
+        """
+        data = {
+            "function_result": func(*args, **kwargs),
+            "function_arguments": (args, kwargs),
+            "status": TASK_STATUS_READY
+        }
+        return cls(data)
+
+    @classmethod
+    def from_registration(cls, uuid):
+        """
+        Returns a TaskResult-Instance with the state
+        TASK_STATUS_WAITING, the result None and a set uuid. This
+        instance can be used to call the ``update()`` method for a
+        delayed result.
+        """
+        data = {
+            "function_result": None,
+            "status": TASK_STATUS_WAITING,
+            "uuid": uuid
+        }
+        return cls(data)
+
+    @classmethod
+    def from_none(cls):
+        """
+        Returns a new empty TaskResult-Instance if there is no waiting
+        function to call and no result to expect. The available
+        attributes are 'status' with the value TASK_STATUS_UNAVAILABLE and
+        the 'result' has the value None. All other attributes are
+        undefined and accessing them will raise an AttributeError.
+        """
+        data = {
+            "status": TASK_STATUS_UNAVAILABLE,
+            "function_result": None
+        }
+        return cls(data)
 
 
 class SQLiteInterface:

@@ -6,7 +6,7 @@ as cron-tasks or to get executed later.
 import uuid
 
 from .schedule import CronScheduler
-from .sql_interface import SQLiteInterface
+from .sql_interface import SQLiteInterface, TaskResult
 
 
 # run every minute:
@@ -129,6 +129,6 @@ def delay(func):
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
-            return uid
-        return func(*args, **kwargs)
+            return TaskResult.from_registration(uid)
+        return TaskResult.from_function_call(func, *args, **kwargs)
     return wrapper
