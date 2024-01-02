@@ -1,8 +1,3 @@
-"""
-**autocron** provides two decorators as external API to mark functions
-as cron-tasks or to get executed later.
-"""
-
 import uuid
 
 from .schedule import CronScheduler
@@ -25,9 +20,10 @@ def cron(crontab=None,
     """
     Decorator for a cronjob. Functions running cronjobs should not get
     called from the main program and therefore don't get arguments.
-    Example usage for a cronjob to run every hour:
+    Example usage for a cronjob to run every hour, at the beginning of
+    the hour:
 
-    >>> @cron("* 1 * * *")
+    >>> @cron("0 * * * *")
     >>> def some_callable():
     >>>    # do periodic stuff here ...
 
