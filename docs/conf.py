@@ -12,7 +12,7 @@ from datetime import date
 project = "autocron"
 # version = autocron.__version__
 
-copyright = '2016 - {}, Klaus Bremer'.format(date.today().year)
+copyright = '2023 - {}, Klaus Bremer'.format(date.today().year)
 author = 'Klaus Bremer'
 
 extensions = [

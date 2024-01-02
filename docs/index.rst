@@ -6,9 +6,9 @@ autocron documentation
 
 **autocron** does not need any dependencies beside the Python Standard-Library and is therefore easy to install and easy to integrate into (web-)applications.
 
-**autocron** makes use of ``SQLite`` as message storage that is fast enought for low- to medium-traffic sites. Which are most websites.
+**autocron** makes use of a dedicated ``SQLite`` database as message storage. This is fast enought for low- to medium-traffic sites. Which are most websites.
 
-    The idea behind ``autocron`` is to make the integration of an asynchronous task handler as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling can work but for horizontal scaling more complex task-queues and -workers are required.
+    The idea behind ``autocron`` is to make the integration of an asynchronous task handler as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work but for horizontal scaling another concept for task-queues and -workers is required.
 
 All configurations are preset with useful values and can get inspected and modified by the ``autocron`` command-line based :ref:`admin interface <admin-iterface>`.
 
@@ -31,11 +31,11 @@ Usage
     from autocron import cron, delay
 
     @cron("* 2 * * *")  # run every day at 2 am
-    def cleanup_archive():
+    def cleanup():
         # do some periodic cleanup here ...
 
     @delay
-    def send_confirmation(address, message):
+    def send_confirmation_mail(address, message):
         # don't wait for the mailserver and delegate this
         # or any other long running task to a background process
 
@@ -87,10 +87,10 @@ Let's consider a django-application that makes use of the ``cron`` and ``delay``
 
     def index(request):
         """view providing the response without delay."""
-        uuid = do_this_later()
-        return HttpResponse(f"Hello, world. uuid: {uuid}")
+        task_response = do_this_later()
+        return HttpResponse(f"Hello, world. uuid: {task_response.uuid}")
 
-To activate autocron in a django-project the proper way to do this is in the ``apps.py`` module of one of the django-applications. Consider the name ``djangoapp`` for one of these applications, then the content of the corresponding ``apps.py`` module may look like: ::
+To activate autocron in a django-project, the proper way to do this is in the ``apps.py`` module of one of the django-applications. Consider the name ``djangoapp`` for one of these applications, then the content of the corresponding ``apps.py`` module may look like: ::
 
     import autocron
     from django.apps import AppConfig
@@ -129,8 +129,8 @@ For flask autocron must get imported and started somewhere. In the following exa
     @app.route("/")
     def hello_world():
         print("in hello_world")
-        tr = do_this_later()
-        return tr.uuid
+        task_response = do_this_later()
+        return task_response.uuid
 
     autocron.start("the_flask_app.db")
 
@@ -158,7 +158,7 @@ For a bottle-application at least two files are recommended to use autocron. Thi
     autocron.start("the_bottle_app.db")
     run(host='localhost', port=8080)
 
-autocron gets imported and started before ``bottle.run()`` is called. But the ``do_this_later()`` function is imported from "utils.py": ::
+autocron gets imported and started before ``bottle.run()`` is called. The ``do_this_later()`` function is imported from "utils.py", also a cronjob-function is defined there: ::
 
     # utils.py
     import time
@@ -211,7 +211,7 @@ In the above example ``autocron.start()`` is not called in the ``__main__`` bloc
 async frameworks
 ................
 
-    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks there still the logic must get implemented and delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. In the end it is a design decision. autocron provides a way to delegate this to an external process.
+    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks the logic must get implemented somewhere and delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. In the end it is a design decision. autocron provides a way to delegate this to an external process.
 
 
 tornado
@@ -251,7 +251,7 @@ autocron gets imported and started in the ``main()`` function. The call of the `
 starlette
 .........
 
-starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks in the same process after finishing the current request first. With autocron a background-task will get decoupled from the process handling the request. Also Exceptions will not have side-effects to other background-tasks and cron-tasks are simple to manage. Again it is a design-decision whether to use starlette with autocron. Here is an example how to integrate autocron in a starlette-application: ::
+starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks after finishing the current request first. With autocron the background-task will get decoupled from the process handling the request. Also Exceptions will not have side-effects to other background-tasks and cron-tasks are simple to manage. Again it is a design-decision whether to use starlette with autocron. Here is an example how to integrate autocron in a starlette-application: ::
 
     # application.py
     from starlette.applications import Starlette
@@ -291,7 +291,6 @@ History
 
    source/decorators
    source/admin
-   source/internals
    source/version_history
    source/license
 
