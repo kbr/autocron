@@ -123,6 +123,7 @@ class TestSQLInterface(unittest.TestCase):
         # test to get the `test_callable` function on due
         # and delete it from the db
         entry = self.interface.get_tasks_on_due()[0]
+        time.sleep(0.001)
         assert entry["function_name"] == test_callable.__name__
         self.interface.delete_callable(entry)
         # wait and test to get the remaining single entry
