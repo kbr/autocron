@@ -17,14 +17,13 @@ Functions decorated with ``delay`` will return ``TaskResult`` instances (see bel
 
 .. automodule:: autocron.decorators
     :members: delay
-    :noindex:
 
 
 
 TaskResult
 ..........
 
-cron-decorated functions return ``TaskResult`` instances.
+cron-decorated functions return ``TaskResult`` instances. These are wrappers around the delayed result. The instances provide attributes like ``is_ready`` to indicate whether a result is available. Also there is the attribute ``uuid`` which can be used to access the database entry with the result later on.
 
 
 .. autoclass:: TaskResult

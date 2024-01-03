@@ -88,7 +88,7 @@ Let's consider a django-application that makes use of the ``cron`` and ``delay``
     def index(request):
         """view providing the response without delay."""
         task_result = do_this_later()
-        return HttpResponse(f"Hello, world. TaskResult is waiting: {task_result.is_waiting}")
+        return HttpResponse(f"Hello, TaskResult uuid: {task_result.uuid}")
 
 To activate autocron in a django-project, the proper way to do this is in the ``apps.py`` module of one of the django-applications. Consider the name ``djangoapp`` for one of these applications, then the content of the corresponding ``apps.py`` module may look like: ::
 
@@ -129,7 +129,7 @@ For flask autocron must get imported and started somewhere. In the following exa
     @app.route("/")
     def hello_world():
         task_result = do_this_later()
-        return f"TaskResult is waiting: {task_result.is_waiting}"
+        return f"Hello, TaskResult uuid: {task_result.uuid}"
 
     autocron.start("the_flask_app.db")
 
@@ -152,7 +152,7 @@ For a bottle-application at least two files are recommended to use autocron. Thi
     @route('/hello')
     def hello():
         task_result = do_this_later()
-        return f"Hello World! TaskResult is waiting: {task_result.is_waiting}"
+        return f"Hello, TaskResult uuid: {task_result.uuid}"
 
     autocron.start("the_bottle_app.db")
     run(host='localhost', port=8080)
@@ -191,7 +191,7 @@ There are different ways to start pyramid for development or for production. Lik
 
     def hello_world(request):
         task_result = do_this_later()
-        return Response(f"Hello World! TaskResult is waiting: {task_result.is_waiting}")
+        return Response(f"Hello, TaskResult uuid: {task_result.uuid}")
 
     autocron.start("the_pyramid_app.db")
 
@@ -227,7 +227,7 @@ The tornado example is similiar to the pyramid and bottle examples, the decorate
     class MainHandler(tornado.web.RequestHandler):
         def get(self):
             task_result = do_this_later()
-            self.write(f"Hello, world! TaskResult is waiting: {task_result.is_waiting}")
+            self.write(f"Hello, TaskResult uuid: {task_result.uuid}")
 
     def make_app():
         return tornado.web.Application([
@@ -261,7 +261,7 @@ starlette already comes with a buildin ``BackgroundTask`` class that can handle 
 
     def homepage(request):
         task_result = do_this_later()
-        return PlainTextResponse(f"Hello, world! TaskResult is waiting: {task_result.is_waiting}")
+        return PlainTextResponse(f"Hello, TaskResult uuid: {task_result.uuid}")
 
     def startup():
         print("Ready to go")
