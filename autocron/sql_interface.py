@@ -243,24 +243,49 @@ class TaskResult(HybridNamespace):
     Helper class to make task-results more handy.
     """
 
+    def _refresh(self):
+        """
+        If the status is TASK_STATUS_WAITING try to update the
+        task_result dictionary with data retrieved from the database.
+        This will return a new task_result instance. If the new instance
+        is still in waiting status, do nothing. Otherwise update
+        self.__dict__ with the retrieved data.
+        The `interface` argument is for testing.
+        """
+        if self.status == TASK_STATUS_WAITING:
+            try:
+                result = self.interface.get_result_by_uuid(self.uuid)
+            except AttributeError:
+                pass
+            else:
+                if result is not None:
+                    self.__dict__.update(result.__dict__)
+
     @property
     def result(self):
-        """shortcut to access the result."""
-        return self.function_result
+        """
+        Shortcut to access the result. If the result is not available because the task still waits to get executed an AttributeError with the message "result not available" is raised.
+        """
+        if self.status == TASK_STATUS_READY:
+            return self.function_result
+        raise AttributeError("result not available.")
 
     @property
     def is_waiting(self):
         """indicates task still waiting to get processed."""
+        self._refresh()
         return self.status == TASK_STATUS_WAITING
 
     @property
     def is_ready(self):
         """indicates task has been processed."""
+        self._refresh()
         return self.status == TASK_STATUS_READY
 
     @property
     def has_error(self):
         """indicates error_message is set."""
+        self._refresh()
         return self.status == TASK_STATUS_ERROR
 
     @classmethod
@@ -292,7 +317,7 @@ class TaskResult(HybridNamespace):
         return cls(data)
 
     @classmethod
-    def from_registration(cls, uuid):
+    def from_registration(cls, uuid, interface):
         """
         Returns a TaskResult-Instance with the state
         TASK_STATUS_WAITING, the result None and a set uuid. This
@@ -302,7 +327,8 @@ class TaskResult(HybridNamespace):
         data = {
             "function_result": None,
             "status": TASK_STATUS_WAITING,
-            "uuid": uuid
+            "uuid": uuid,
+            "interface": interface
         }
         return cls(data)
 

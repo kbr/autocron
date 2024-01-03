@@ -112,19 +112,21 @@ def cron(crontab=None,
 
 def delay(func):
     """
-    Decorator for a delayed task. Simply apply this as:
+    Decorator for a delayed task. Apply this as:
 
     >>> @delay
     >>> def sendmail(recipient, message):
     >>>     # conde goes here ...
 
-    The decorator does not take any arguments. Calling ``sendmail()`` will return from the call immediately and this callable will get executed later in another process.
+    The decorator does not take any arguments. Calling ``sendmail()``
+    will return from the call immediately and this callable will get
+    executed later in another process.
     """
     def wrapper(*args, **kwargs):
         if interface.accept_registrations:
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
-            return TaskResult.from_registration(uid)
+            return TaskResult.from_registration(uid, interface)
         return TaskResult.from_function_call(func, *args, **kwargs)
     return wrapper

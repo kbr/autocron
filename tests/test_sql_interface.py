@@ -117,18 +117,19 @@ class TestSQLInterface(unittest.TestCase):
 
     def test_delete(self):
         # register two callables, one with a schedule in the future
-        schedule = datetime.datetime.now() + datetime.timedelta(milliseconds=1)
-        self.interface.register_callable(test_adder, schedule=schedule)
-        self.interface.register_callable(test_callable)
+        now = datetime.datetime.now()
+        future_schedule = now + datetime.timedelta(milliseconds=2)
+        past_schedule = now - datetime.timedelta(seconds=10)
+        self.interface.register_callable(test_adder, schedule=future_schedule)
+        self.interface.register_callable(test_callable, schedule=past_schedule)
         # test to get the `test_callable` function on due
         # and delete it from the db
         entry = self.interface.get_tasks_on_due()[0]
-        time.sleep(0.001)
         assert entry["function_name"] == test_callable.__name__
         self.interface.delete_callable(entry)
         # wait and test to get the remaining single entry
         # and check whether it is the `test_adder` function
-        time.sleep(0.001)
+        time.sleep(0.002)
         entries = self.interface.get_tasks_on_due()
         assert len(entries) == 1
         entry = entries[0]
@@ -594,6 +595,14 @@ def task_result_function(a, b, c="c", d="d"):
 
 class TestTaskResult(unittest.TestCase):
 
+    def setUp(self):
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(TEST_DB_NAME)
+
+    def tearDown(self):
+        if self.interface.db_name:
+            pathlib.Path(self.interface.db_name).unlink()
+
     def test_task_result_from_function_call(self):
         args = ("a", "b")
         tr = sql_interface.TaskResult.from_function_call(
@@ -610,6 +619,38 @@ class TestTaskResult(unittest.TestCase):
             **kwargs
         )
         assert tr.result == "efgh"
+
+    def test_update_task_result(self):
+        """
+        Create an empty TaskResult in waiting state and create a result.
+        Both with the same uuid. Check whether TaskResult can update
+        itself with a delated result.
+        """
+        uid = uuid.uuid4().hex
+        tr = sql_interface.TaskResult.from_registration(uid, self.interface)
+        assert tr.status is sql_interface.TASK_STATUS_WAITING
+        assert tr.is_waiting is True
+        # next is a hack because self.assertRaises expects as second argument
+        # a callable, like self.assertRaises(AttributeError, tr.result).
+        # This does not work with properties.
+        try:
+            tr.result
+        except AttributeError:
+            exception_was_raised = True
+        else:
+            exception_was_raised = False
+        assert exception_was_raised is True
+        # now inject the task to execute:
+        self.interface.register_result(task_result_function, uid, ("a", "b"))
+        # the task is still in waiting state:
+        assert tr.is_waiting is True
+        # update result, we calculate the result here:
+        result = task_result_function("a", "b")
+        self.interface.update_result(uid, result=result)
+        # now the state hase changed:
+        assert tr.is_waiting is False
+        assert tr.is_ready is True
+        assert tr.result == "abcd"
 
 
 class TestDelayedInitialization(unittest.TestCase):
