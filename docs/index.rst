@@ -87,8 +87,8 @@ Let's consider a django-application that makes use of the ``cron`` and ``delay``
 
     def index(request):
         """view providing the response without delay."""
-        task_response = do_this_later()
-        return HttpResponse(f"Hello, world. uuid: {task_response.uuid}")
+        task_result = do_this_later()
+        return HttpResponse(f"Hello, world. TaskResult is waiting: {task_result.is_waiting}")
 
 To activate autocron in a django-project, the proper way to do this is in the ``apps.py`` module of one of the django-applications. Consider the name ``djangoapp`` for one of these applications, then the content of the corresponding ``apps.py`` module may look like: ::
 
@@ -123,14 +123,13 @@ For flask autocron must get imported and started somewhere. In the following exa
 
     @autocron.delay
     def do_this_later():
-        time.sleep(2)
+        time.sleep(3)
         print("\ndo this later")
 
     @app.route("/")
     def hello_world():
-        print("in hello_world")
-        task_response = do_this_later()
-        return task_response.uuid
+        task_result = do_this_later()
+        return f"TaskResult is waiting: {task_result.is_waiting}"
 
     autocron.start("the_flask_app.db")
 
@@ -153,7 +152,7 @@ For a bottle-application at least two files are recommended to use autocron. Thi
     @route('/hello')
     def hello():
         task_result = do_this_later()
-        return f"Hello World! TaskResult uuid: {task_result.uuid}"
+        return f"Hello World! TaskResult is waiting: {task_result.is_waiting}"
 
     autocron.start("the_bottle_app.db")
     run(host='localhost', port=8080)
@@ -192,16 +191,16 @@ There are different ways to start pyramid for development or for production. Lik
 
     def hello_world(request):
         task_result = do_this_later()
-        return Response(f'Hello World! TaskResult uuid: {task_result.uuid}')
+        return Response(f"Hello World! TaskResult is waiting: {task_result.is_waiting}")
 
     autocron.start("the_pyramid_app.db")
 
-    if __name__ == '__main__':
+    if __name__ == "__main__":
         with Configurator() as config:
-            config.add_route('hello', '/')
-            config.add_view(hello_world, route_name='hello')
+            config.add_route("hello", "/")
+            config.add_view(hello_world, route_name="hello")
             app = config.make_wsgi_app()
-        server = make_server('0.0.0.0', 6543, app)
+        server = make_server("0.0.0.0", 6543, app)
         server.serve_forever()
 
 In the above example ``autocron.start()`` is not called in the ``__main__`` block to get also started if the "application.py" module gets imported itself. The "utils.py" file is the same as in the bottle-example.
@@ -211,7 +210,7 @@ In the above example ``autocron.start()`` is not called in the ``__main__`` bloc
 async frameworks
 ................
 
-    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks the logic must get implemented somewhere and delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. autocron provides a way to delegate this to an external process. The next sections show how to do this with ``tornado`` and ``starlette``.
+    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks the logic must get implemented somewhere and the delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. autocron provides a way to delegate this to an external process. The next sections show how to do this with ``tornado`` and ``starlette``.
 
 
 tornado
@@ -222,14 +221,13 @@ The tornado example is similiar to the pyramid and bottle examples, the decorate
     # application.py
     import asyncio
     import tornado
-
     import autocron
     from utils import do_this_later
 
     class MainHandler(tornado.web.RequestHandler):
         def get(self):
             task_result = do_this_later()
-            self.write(f"Hello, world! TaskResult.uuid {task_result.uuid}")
+            self.write(f"Hello, world! TaskResult is waiting: {task_result.is_waiting}")
 
     def make_app():
         return tornado.web.Application([
@@ -246,7 +244,7 @@ The tornado example is similiar to the pyramid and bottle examples, the decorate
     if __name__ == "__main__":
         asyncio.run(main())
 
-autocron gets imported and started in the ``main()`` function. The call of the ``delay``-decorated ``do_this_later()`` function must not get adapted to an async call, because the decorators are non-blocking (at least they run fast).
+autocron gets imported and then started from the ``main()`` function. The call of the ``delay``-decorated ``do_this_later()`` function must not get adapted to an async call (with ``async`` or `` await``), because the decorators are non-blocking (at least they run fast).
 
 starlette
 .........
@@ -263,14 +261,14 @@ starlette already comes with a buildin ``BackgroundTask`` class that can handle 
 
     def homepage(request):
         task_result = do_this_later()
-        return PlainTextResponse(f'Hello, world! TaskResult.uuid {task_result.uuid}')
+        return PlainTextResponse(f"Hello, world! TaskResult is waiting: {task_result.is_waiting}")
 
     def startup():
-        print('Ready to go')
+        print("Ready to go")
         autocron.start("the_starlette_app.db")
 
     routes = [
-        Route('/', homepage),
+        Route("/", homepage),
     ]
 
     app = Starlette(debug=True, routes=routes, on_startup=[startup])
