@@ -211,7 +211,7 @@ In the above example ``autocron.start()`` is not called in the ``__main__`` bloc
 async frameworks
 ................
 
-    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks the logic must get implemented somewhere and delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. In the end it is a design decision. autocron provides a way to delegate this to an external process.
+    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense at all in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However, i.e. for cron-tasks the logic must get implemented somewhere and delayed tasks have to be handled in the framework-internal thread- or process-pools anyway, like any other blocking functions. And all these tasks must get handed around in the main-event-loop beside all other requests. autocron provides a way to delegate this to an external process. The next sections show how to do this with ``tornado`` and ``starlette``.
 
 
 tornado
