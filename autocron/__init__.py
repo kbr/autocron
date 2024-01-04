@@ -9,12 +9,14 @@ from .decorators import (
     delay,
 )
 from .engine import Engine
+from .sql_interface import SQLiteInterface
 
 
-__all__ = ["cron", "delay", "start", "stop"]
+__all__ = ["cron", "delay", "start", "stop", "get_results"]
 __version__ = "0.7.2.dev"
 
 _engine = Engine()
+_interface = SQLiteInterface()
 
 
 def start(database_file):
@@ -36,3 +38,10 @@ def stop():
     ``stop`` is normalwise not required.
     """
     _engine.stop()
+
+
+def get_results():
+    """
+    Returns a list with all result entries from delayed functions.
+    """
+    return _interface.get_results()

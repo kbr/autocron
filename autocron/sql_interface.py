@@ -475,7 +475,7 @@ class SQLiteInterface:
         data = {k: v for k, v in data.items() if k != "self"}
         self._preregistered_tasks.append(data)
 
-    def register_preregistered_tasks(self):
+    def _register_preregistered_tasks(self):
         """
         Run the stored registrations on the now up and
         running database.
@@ -492,6 +492,13 @@ class SQLiteInterface:
         if not self.is_initialized:
             self._set_storage_location(db_name)
             self._init_database()
+            # ignore the result, but set new state:
+            self.get_tasks_on_due(
+                status=TASK_STATUS_PROCESSING,
+                new_status=TASK_STATUS_WAITING
+            )
+            self.delete_cronjobs()
+            self._register_preregistered_tasks()
 
 
     # -- task-methods ---

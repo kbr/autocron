@@ -422,6 +422,54 @@ class TestSQLInterface(unittest.TestCase):
             self.interface.decrement_running_workers(test_pids.pop())
         check_settings()
 
+
+class TestDatabaseInitialization(unittest.TestCase):
+
+    def setUp(self):
+        self.interface = sql_interface.SQLiteInterface()
+        self.interface.init_database(db_name=TEST_DB_NAME)
+
+    def tearDown(self):
+        pathlib.Path(self.interface.db_name).unlink()
+
+    def test_initialization(self):
+        """
+        Scenario: On initialization old cron-task entries should get
+        deleted, because in the application they may have been
+        "dedecorated". All decorated and preregistered cron-task are
+        added later on. Also from a former application run some delayed
+        task may have survived and are in PROCESSING state but have not
+        been executed (and deleted). These tasks must get reset to
+        WAITING state.
+        """
+        self.interface.register_callable(
+            test_multiply, status=sql_interface.TASK_STATUS_PROCESSING
+        )
+        tasks = self.interface.get_tasks_on_due(
+            status=sql_interface.TASK_STATUS_WAITING
+        )
+        self.assertFalse(tasks)
+        self.interface.register_callable(test_callable, crontab="* * * * *")
+        self.assertTrue(self.interface.is_initialized)
+        # deactivate and activate database again:
+        self.interface.db_name = None
+        self.assertFalse(self.interface.is_initialized)
+        # preregister a new cron-task:
+        self.interface.register_callable(test_adder, crontab="* * * * *")
+        self.interface.init_database(db_name=TEST_DB_NAME)
+        self.assertTrue(self.interface.is_initialized)
+        # old cron-task must be gone:
+        tasks = self.interface.get_tasks_by_signature(test_callable)
+        self.assertFalse(tasks)
+        # but the new one must be there:
+        tasks = self.interface.get_tasks_by_signature(test_adder)
+        self.assertTrue(tasks)
+        # and the test_multiply task should now be in WAITING state:
+        tasks = self.interface.get_tasks_by_signature(test_multiply)
+        assert tasks[0].status == sql_interface.TASK_STATUS_WAITING
+
+
+
 # decorator testing includes database access.
 # for easier testing decorator tests are included here.
 
@@ -677,13 +725,8 @@ class TestDelayedInitialization(unittest.TestCase):
         decorators.interface.register_callable(cron_function)
         # should fail, because the database has not been set up yet:
         self.assertRaises(TypeError, decorators.interface.get_tasks)
+        # after initializing the task should be available:
         decorators.interface.init_database(TEST_DB_NAME)
-        # should work now but without any entries in new database:
-        tasks = decorators.interface.get_tasks()
-        assert len(tasks) == 0
-        # register the preregistered tasks. The cron_function()
-        # should be in the database now:
-        decorators.interface.register_preregistered_tasks()
         tasks = decorators.interface.get_tasks()
         assert len(tasks) == 1
         # check that the task is indeed the cron_function()
@@ -698,7 +741,7 @@ class TestDelayedInitialization(unittest.TestCase):
         cron_decorator(delay_function)
         # set the database and check for two entries
         decorators.interface.init_database(TEST_DB_NAME)
-        decorators.interface.register_preregistered_tasks()
+        decorators.interface._register_preregistered_tasks()
         tasks = decorators.interface.get_tasks()
         assert len(tasks) == 2
         # registration of other functions should work as expected:
