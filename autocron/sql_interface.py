@@ -438,6 +438,8 @@ class SQLiteInterface:
         parameters is interpreted differently as as sequence of ordered
         tuples or dictionaries as placehoöders for the provided cmd.
         """
+        if self.db_name is None:
+            raise IOError("No autocron database defined.")
         con = sqlite3.connect(
             self.db_name,
             detect_types=sqlite3.PARSE_DECLTYPES
