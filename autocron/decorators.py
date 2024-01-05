@@ -1,10 +1,12 @@
+import importlib
+import types
 import uuid
 
 from .schedule import CronScheduler
 from .sql_interface import SQLiteInterface, TaskResult
 
 
-# run every minute:
+# default: run every minute:
 DEFAULT_CRONTAB = "* * * * *"
 
 interface = SQLiteInterface()
@@ -122,11 +124,33 @@ def delay(func):
     will return from the call immediately and this callable will get
     executed later in another process.
     """
+    # provide a new name for the decorated function to circumvent the
+    # wrapper when called from the background task:
+    function = _get_function_alias(func)
+    function_module = importlib.import_module(func.__module__)
+    setattr(function_module, function.__name__, func)
+
     def wrapper(*args, **kwargs):
         if interface.accept_registrations:
+            # active: return TaskResult in waiting state
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
-            interface.register_callable(func, **data)
+            interface.register_callable(function, **data)
             return TaskResult.from_registration(uid, interface)
-        return TaskResult.from_function_call(func, *args, **kwargs)
+        else:
+            # inactive: return TaskResult from the original callable
+            return TaskResult.from_function_call(func, *args, **kwargs)
+
     return wrapper
+
+
+def _get_function_alias(func):
+    """
+    Returns a SimpleNamespace-object that can be used as a function
+    signature. The signature is an alias of the original function.
+    Helper function for the delay-decorator and for the unit-tests.
+    """
+    return types.SimpleNamespace(
+        __module__ = func.__module__,
+        __name__ = f"{func.__name__}_alias"
+    )
