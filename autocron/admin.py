@@ -84,9 +84,10 @@ def report_tasks_on_due():
 
 def report_cron_tasks():
     """Report all task which are cron-jobs."""
-    tasks = interface.get_tasks()
-    cron_tasks = [task for task in tasks if task.crontab]
-    _report_tasks(cron_tasks)
+    _report_tasks(interface.get_crontasks())
+#     tasks = interface.get_tasks()
+#     cron_tasks = [task for task in tasks if task.crontab]
+#     _report_tasks(cron_tasks)
 
 
 def report_results():
@@ -157,7 +158,7 @@ def delete_database():
         # a new database will get created.
         # However, create a new database here and now:
         # pylint: disable=protected-access
-        interface._init_database()
+        # interface._init_database()
     else:
         print("abort command")
 

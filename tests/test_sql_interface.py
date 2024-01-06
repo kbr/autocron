@@ -726,7 +726,7 @@ class TestDelayedInitialization(unittest.TestCase):
         # the database has been set up.
         decorators.interface.register_callable(cron_function)
         # should fail, because the database has not been set up yet:
-        self.assertRaises(TypeError, decorators.interface.get_tasks)
+        self.assertRaises(OSError, decorators.interface.get_tasks)
         # after initializing the task should be available:
         decorators.interface.init_database(TEST_DB_NAME)
         tasks = decorators.interface.get_tasks()
@@ -755,3 +755,16 @@ class TestDelayedInitialization(unittest.TestCase):
         decorators.interface.register_callable(test_multiply)
         tasks = decorators.interface.get_tasks()
         assert len(tasks) == 3
+
+    def test_register_cron_function_after_start(self):
+        decorators.interface.init_database(TEST_DB_NAME)
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 0
+        cron_decorator = decorators.cron()
+        cron_decorator(cron_function)
+        tasks = decorators.interface.get_tasks()
+        assert len(tasks) == 1
+        # is the crontab attribute set?
+        task = tasks[0]
+        self.assertTrue(task.crontab)
+

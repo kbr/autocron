@@ -60,6 +60,9 @@ CMD_GET_TASKS = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}"""
 CMD_UPDATE_TASK_STATUS = f"""
     UPDATE {DB_TABLE_NAME_TASK} SET status = ? WHERE rowid == ?"""
+CMD_GET_CRONTASKS = f"""
+    SELECT  {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}
+    WHERE crontab <> ''"""
 CMD_UPDATE_CRONTASK_SCHEDULE = f"""
     UPDATE {DB_TABLE_NAME_TASK} SET schedule = ?, status = ? WHERE rowid == ?"""
 CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
@@ -640,6 +643,10 @@ class SQLiteInterface:
         gets identified by the `rowid`.
         """
         self._execute(CMD_DELETE_TASK, [entry["rowid"]])
+
+    def get_crontasks(self):
+        cursor = self._execute(CMD_GET_CRONTASKS)
+        return self._fetch_all_callable_entries(cursor)
 
     def delete_cronjobs(self):
         """
