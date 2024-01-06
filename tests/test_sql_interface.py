@@ -42,7 +42,7 @@ class TestSQLInterface(unittest.TestCase):
         self._result_ttl = self.interface._result_ttl
 
     def tearDown(self):
-        pathlib.Path(self.interface.db_name).unlink()
+        pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
         self.interface._result_ttl = self._result_ttl
 
     def test_storage_location(self):

@@ -28,11 +28,14 @@ class Worker:
         self.error_message = None
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
+        # Get a SQLiteInterface instance 'as is' without the
+        # initialization step to clean up tasks.
+        # Providing the databasename will set the dtatabase
+        # to initialized-state. So no new tasks are registered
+        # from a worker.
+        # (keep in mind that every worker runs in a separate process.)
         self.interface = sql_interface.SQLiteInterface()
-        self.interface.init_database(db_name=database_filename)
-        # prevent delay-decorated function to register itself again
-        # when called as task.
-        # (this is save because the worker runs in its own process)
+        self.interface.db_name=database_filename
         self.interface.accept_registrations = False
 
     def terminate(self, *args):  # pylint: disable=unused-argument

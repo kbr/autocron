@@ -355,6 +355,7 @@ class SQLiteInterface:
     """
     SQLite interface for application specific operations.
     This class is a Singleton.
+
     """
 
     _instance = None
@@ -368,8 +369,25 @@ class SQLiteInterface:
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
         self._accept_registrations = True
+        self._db_name = None
         self.autocron_lock_is_set = None
-        self.db_name = None
+
+    @property
+    def db_name(self):
+        return self._db_name
+
+    @db_name.setter
+    def db_name(self, db_name):
+        """
+        Expand the given database filename to the storage-location path
+        if the filename is not an absolute path. In the latter case the
+        absolute path will get used (and must exist). If db_name is None
+        set None directly.
+        """
+        if db_name is None:
+            self._db_name = None
+        else:
+            self._set_storage_location(db_name)
 
     @property
     def accept_registrations(self):
@@ -382,7 +400,7 @@ class SQLiteInterface:
     @property
     def is_initialized(self):
         """Flag whether the database is available."""
-        return self.db_name is not None
+        return self._db_name is not None
 
     def _init_database(self):
         """
@@ -441,10 +459,10 @@ class SQLiteInterface:
         parameters is interpreted differently as as sequence of ordered
         tuples or dictionaries as placehoöders for the provided cmd.
         """
-        if self.db_name is None:
+        if self._db_name is None:
             raise IOError("No autocron database defined.")
         con = sqlite3.connect(
-            self.db_name,
+            self._db_name,
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         with con:
@@ -469,7 +487,7 @@ class SQLiteInterface:
             except RuntimeError:
                 # no home directory found
                 path = pathlib.Path.cwd() / db_name
-        self.db_name = path
+        self._db_name = path
 
     def _preregister_task(self, data):
         """
