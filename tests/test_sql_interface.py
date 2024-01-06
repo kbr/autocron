@@ -552,8 +552,7 @@ class TestDelayDecorator(unittest.TestCase):
         self._deactivate()
         wrapper = decorators.delay(delay_function)
         task_result = wrapper()
-        assert isinstance(task_result, TaskResult) is True
-        assert task_result.result == 42
+        assert task_result == 42
         # activate so that get_tasks_by_signature() works
         self._activate()
         entries = self.interface.get_tasks_by_signature(delay_function)
@@ -563,8 +562,7 @@ class TestDelayDecorator(unittest.TestCase):
         wrapper = decorators.delay(delay_function)
         wrapper_return_value = wrapper()
         assert isinstance(wrapper_return_value, TaskResult) is True
-        delay_function_alias = decorators._get_function_alias(delay_function)
-        entries = self.interface.get_tasks_by_signature(delay_function_alias)
+        entries = self.interface.get_tasks_by_signature(delay_function)
         assert len(entries) == 1
 
     def test_active_and_get_result(self):
@@ -587,8 +585,7 @@ class TestDelayDecorator(unittest.TestCase):
 
         # 2: a single entry is now in both tables:
         time.sleep(0.001)  # have some patience with the db.
-        test_adder_alias = decorators._get_function_alias(test_adder)
-        task_entries = self.interface.get_tasks_by_signature(test_adder_alias)
+        task_entries = self.interface.get_tasks_by_signature(test_adder)
         assert len(task_entries) == 1
         # result is also of type TaskResult()
         result = self.interface.get_result_by_uuid(task_result.uuid)

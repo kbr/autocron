@@ -48,7 +48,7 @@ def run_worker_monitor(exit_event, database_file):
     """
     processes = []
     interface = SQLiteInterface()
-    interface.init_database(database_file)
+    interface.db_name = database_file
     max_workers = interface.get_max_workers()
     for _ in range(max_workers):
         process = start_subprocess(database_file)
