@@ -124,33 +124,18 @@ def delay(func):
     will return from the call immediately and this callable will get
     executed later in another process.
     """
-    # provide a new name for the decorated function to circumvent the
-    # wrapper when called from the background task:
-    function = _get_function_alias(func)
-    function_module = importlib.import_module(func.__module__)
-    setattr(function_module, function.__name__, func)
 
     def wrapper(*args, **kwargs):
         if interface.accept_registrations:
             # active: return TaskResult in waiting state
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
-            interface.register_callable(function, **data)
+            interface.register_callable(func, **data)
             return TaskResult.from_registration(uid, interface)
         else:
-            # inactive: return TaskResult from the original callable
-            return TaskResult.from_function_call(func, *args, **kwargs)
+            # inactive: return result from the original callable
+            # this is the case if autocron is inactive or the code
+            # is executed in a worker process.
+            return func(*args, **kwargs)
 
     return wrapper
-
-
-def _get_function_alias(func):
-    """
-    Returns a SimpleNamespace-object that can be used as a function
-    signature. The signature is an alias of the original function.
-    Helper function for the delay-decorator and for the unit-tests.
-    """
-    return types.SimpleNamespace(
-        __module__ = func.__module__,
-        __name__ = f"{func.__name__}_alias"
-    )
