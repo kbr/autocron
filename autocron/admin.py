@@ -118,6 +118,28 @@ def set_max_workers(workers):
     print(f"Set max_workers to {workers}")
 
 
+def set_worker_idle_time(idle_time):
+    """
+    Set the idle time of the worker in seconds. This is the time the
+    worker sleeps when no new tasks are on due.
+    """
+    settings = interface.get_settings()
+    settings.worker_idle_time = idle_time
+    interface.set_settings(settings)
+    print(f"Set worker idle time to {idle_time} seconds")
+
+
+def set_monitor_idle_time(idle_time):
+    """
+    Set the idle time of the worker in seconds. This is the time the
+    worker sleeps when no new tasks are on due.
+    """
+    settings = interface.get_settings()
+    settings.monitor_idle_time = idle_time
+    interface.set_settings(settings)
+    print(f"Set monitor idle time to {idle_time} seconds")
+
+
 def _convert_flag(flag):
     """
     flag can be a string with 'true'', 'false' or 'on'', 'off''.
@@ -198,6 +220,18 @@ def get_command_line_arguments():
         help="set number of maximum worker processes."
     )
     parser.add_argument(
+        "--set-worker-idle-time",
+        dest="worker_idle_time",
+        type=float,
+        help="set worker idle time in seconds."
+    )
+    parser.add_argument(
+        "--set-monitor-idle-time",
+        dest="monitor_idle_time",
+        type=float,
+        help="set monitor idle time in seconds."
+    )
+    parser.add_argument(
         "--set-monitor-lock",
         dest="monitor_lock",
         help="set monitor lock flag: [true|false or on|off]."
@@ -261,6 +295,10 @@ def main(args=None):
         set_monitor_lock(args.monitor_lock)
     elif args.autocron_lock:
         set_autocron_lock(args.autocron_lock)
+    elif args.worker_idle_time:
+        set_worker_idle_time(args.worker_idle_time)
+    elif args.monitor_idle_time:
+        set_worker_idle_time(args.monitor_idle_time)
     else:
         print_usage()
 
