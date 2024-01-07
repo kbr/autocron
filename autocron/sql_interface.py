@@ -520,7 +520,6 @@ class SQLiteInterface:
                 status=TASK_STATUS_PROCESSING,
                 new_status=TASK_STATUS_WAITING
             )
-            self.delete_cronjobs()
             self._register_preregistered_tasks()
 
 

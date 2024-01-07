@@ -159,6 +159,7 @@ class Engine:
             settings.running_workers = 0
             settings.worker_pids = ""
             self.interface.set_settings(settings)
+            self.interface.delete_cronjobs()
 
     def _terminate(self, signalnum, stackframe=None):
         """

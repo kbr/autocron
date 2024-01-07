@@ -20,6 +20,12 @@ from autocron import worker
 TEST_DB_NAME = "test.db"
 
 
+# all labels starting with 'tst_' are test-functions:
+
+def tst_cron():
+    pass
+
+
 class TestEngine(unittest.TestCase):
 
     def setUp(self):
@@ -136,8 +142,7 @@ class TestWorkerStartStop(unittest.TestCase):
 
     def tearDown(self):
         # clean up if tests don't run through
-        if self.interface.db_name:
-            pathlib.Path(self.interface.db_name).unlink()
+        pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
 
     def test_start_and_stop_workerprocess(self):
         process = subprocess.Popen(self.cmd, cwd=self.cwd)
@@ -145,3 +150,24 @@ class TestWorkerStartStop(unittest.TestCase):
         process.terminate()
         time.sleep(self._worker_idle_time * 2)
         assert process.poll() is not None
+
+
+    def test_delete_crontasks_on_shutdown(self):
+        """
+        Scenario: put a cron-task in the database. Then close the
+        database (to simulate a shutdown of the application). The
+        cron-task should be deleted.
+        """
+        # put a crontask in the database:
+        self.interface.register_callable(tst_cron, crontab="* * * * *")
+        tasks = self.interface.get_tasks_by_signature(tst_cron)
+        self.assertTrue(tasks)
+
+        # simulate an engine in running mode and stop it:
+        engine_ = engine.Engine(interface=self.interface)
+        engine_.monitor_thread = True
+        engine_.stop()
+
+        # the crontask should now be deleted:
+        tasks = self.interface.get_tasks_by_signature(tst_cron)
+        self.assertFalse(tasks)
