@@ -134,28 +134,13 @@ For flask autocron must get imported and started somewhere. In the following exa
         task_result = do_this_later()
         return f"Hello, TaskResult uuid: {task_result.uuid}"
 
-It would also work if autocron gets started at the end of the module.
+It also would work if autocron gets started at the end of the module.
 
 
 bottle
 ......
 
-For a bottle-application at least two files are recommended to use autocron. This is because bottle may start the application from the command line as the main-module and there is no reliable way to get the real name of the main-module from another module imported to the main-module. For this reason autocron-decorated functions should not get defined in the main-module. For example here is a bottle-application in a file named "application.py" that may get started like ``$ python application.py``: ::
-
-    # application.py
-    import autocron
-    from bottle import route, run
-    from utils import do_this_later
-
-    @route('/hello')
-    def hello():
-        task_result = do_this_later()
-        return f"Hello, TaskResult uuid: {task_result.uuid}"
-
-    autocron.start("the_bottle_app.db")
-    run(host='localhost', port=8080)
-
-autocron gets imported and started before ``bottle.run()`` is called. The ``do_this_later()`` function is imported from "utils.py", also a cronjob-function is defined there: ::
+For a bottle-application at least two files are recommended to use autocron. This is because the bottle application may get started from the command line as the Python main-module. Unfortunately there is no reliable way to get the real name of the main-module. For this reason autocron-decorated functions should not be defined in the main-module. For example here ist a "utils.py" file with two decorated function: ::
 
     # utils.py
     import time
@@ -171,13 +156,31 @@ autocron gets imported and started before ``bottle.run()`` is called. The ``do_t
         """do something from time to time"""
         print("action from the cron job")
 
-This way autocron is able to import the functions later to execute them in another process. Of course bottle-applications can get started in other ways, not causing the problem to resolve the name of the main-module, however it is best to avoid a situation like this at all.
+
+The entry-point of the bottle-application in a file named "application.py" that may get started like ``$ python application.py``: ::
+
+    # application.py
+    import autocron
+    from bottle import route, run
+    from utils import do_this_later
+
+    @route('/hello')
+    def hello():
+        task_result = do_this_later()
+        return f"Hello, TaskResult uuid: {task_result.uuid}"
+
+    autocron.start("the_bottle_app.db")
+    run(host='localhost', port=8080)
+
+autocron gets imported and started before ``bottle.run()`` is called, because run() will not return. The ``do_this_later()`` function is imported from "utils.py". Also the cronjob-function is imported and will get executed every minute.
+
+Of course bottle-applications can get started in other ways, not causing the problem to resolve the name of the main-module, however it is best to avoid a situation like this at all.
 
 
 pyramid
 .......
 
-For development a pyramid application can get started from the command-line via ``$ python application.py``, like a bottle application. Then for the same reasons the autocron decorated functions should get defined in another module that gets imported from the main-module: ::
+For development a pyramid application can get started from the command-line via ``$ python application.py`` – like a bottle application. For the same reasons the autocron decorated functions should get defined in another module that gets imported from the main-module: ::
 
     # application.py
     from wsgiref.simple_server import make_server
