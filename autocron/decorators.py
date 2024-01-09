@@ -131,11 +131,17 @@ def delay(func):
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
             interface.register_callable(func, **data)
-            return TaskResult.from_registration(uid, interface)
+            result = TaskResult.from_registration(uid, interface)
+        elif interface.autocron_lock_is_set:
+            # inactive: return TaskResult in ready state
+            # by calling the wrapped function. This will keep the
+            # type of the returned value consistant for the application.
+            result = TaskResult.from_function_call(func, *args, **kwargs)
         else:
-            # inactive: return result from the original callable
-            # this is the case if autocron is inactive or the code
-            # is executed in a worker process.
-            return func(*args, **kwargs)
+            # active but registration not allowed.
+            # this is the wrapper as seen by a worker process:
+            # return result from the original callable
+            result = func(*args, **kwargs)
+        return result
 
     return wrapper

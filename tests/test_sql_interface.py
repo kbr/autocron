@@ -498,7 +498,7 @@ class TestDelayDecorator(unittest.TestCase):
     def _deactivate(self):
         self.interface.accept_registrations = False
 
-    def test_inactive(self):
+    def test_wrapper_seen_by_worker(self):
         # does not return the original function but calls
         # the original function indirect instead of registering
         # the task in the db.
@@ -517,6 +517,16 @@ class TestDelayDecorator(unittest.TestCase):
         assert isinstance(wrapper_return_value, TaskResult) is True
         entries = self.interface.get_tasks_by_signature(tst_delay)
         assert len(entries) == 1
+
+    def test_inactive(self):
+        # autocron does not run, but the wrapper returns a
+        # TaskResult instance for the application.
+        self.interface.autocron_lock_is_set = True
+        wrapper = decorators.delay(tst_delay)
+        wrapper_return_value = wrapper()
+        assert isinstance(wrapper_return_value, TaskResult) is True
+        assert wrapper_return_value.is_ready is True
+        assert wrapper_return_value.result == 42
 
     def test_active_and_get_result(self):
         """
