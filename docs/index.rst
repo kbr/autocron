@@ -2,13 +2,13 @@
 autocron documentation
 ======================
 
-**autocron** is a simple asynchronous task handler to execute tasks in a separate process for not blocking the main application otherwise.
+**autocron** is a simple asynchronous task handler to execute tasks in a separate process, not blocking the main application otherwise.
 
-**autocron** does not need any dependencies beside the Python Standard-Library and is therefore easy to install and easy to integrate into (web-)applications.
+**autocron** does not need any dependencies beside the Python Standard-Library and is easy to install and easy to integrate into web-applications.
 
-**autocron** makes use of a dedicated ``SQLite`` database as message storage. This is fast enought for low- to medium-traffic sites. Which are most websites.
+**autocron** makes use of a ``SQLite`` database as message storage. This is fast enought for low- to medium-traffic sites. Which are most websites.
 
-    The idea behind ``autocron`` is to make the integration of an asynchronous task handler as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work but for horizontal scaling another concept for task-queues and -workers is required.
+    The idea behind ``autocron`` is to make the integration of an asynchronous task handler as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work but for horizontal scaling autocron is currently not designed.
 
 All configurations are preset with useful values and can get inspected and modified by the ``autocron`` command-line based :ref:`admin interface <admin-iterface>`.
 
@@ -39,11 +39,13 @@ Usage
         # don't wait for the mailserver and delegate this
         # or any other long running task to a background process
 
-A ``cron`` decorated function should not return a result and also should not get called from the application. Also ``cron`` accepts keyword arguments like ``minutes`` and ``hours`` instead of a cron-formated string.
+- A ``cron`` decorated function should not return a result and also should not get called from the application. Also ``cron`` accepts keyword arguments like ``minutes`` and ``hours`` instead of a cron-formated string.
 
-A ``delay`` decorated function returns a ``TaskResult`` instance as result, no matter whether autocron is active or not. A ``TaskResult`` instance provides attributes like ``is_ready`` which is a ``boolean`` indicating whether a result is available. In this case the function result is accessible by ``TaskResult.result``. In case the result should get ignored it is safe to ignore the returned ``TaskResult`` instance. autocon deletes outdated results from time to time from the database.
+- A ``delay`` decorated function returns a ``TaskResult`` instance as result, regardless whether autocron is active or inactive.
 
-**Activate and deactivate:** for development web-frameworks provide debug-settings in one or the other way. For debugging it is often desired to not run background processes at the same time. autocron provides a global flag whether to start or not. This can be set by the autocron-admin tool. After installing autocron the admin-tool is available from the command line as the ``autocron`` command: ::
+- A ``TaskResult`` instance provides attributes like ``is_ready`` which is a ``boolean`` indicating whether a result is available. In this case the function result is accessible by ``TaskResult.result``. In case the result should get ignored it is safe to ignore the returned ``TaskResult`` instance. autocon deletes outdated results from time to time from the database.
+
+**Activate and deactivate:** for development and for debugging it is often not desired to run background processes at the same time. autocron provides a global flag whether to start or not. This can be set by the autocron-admin tool. After installing autocron the admin-tool is available from the command line as the ``autocron`` command: ::
 
     $ autocron <database-filename> --set-autocron-lock on
 
@@ -60,7 +62,7 @@ To make the decorators work **autocron** must get started somehow. This happens 
 
 where "project.db" is the name of the database-file that is used as a message storage. How to do this depends on the used framework. autocron provides also a ``stop()`` method to shut down running background processes. The ``stop()``- method gets triggered on application shutdown and it is not required to call this method explicitly.
 
-By default the database-file is stored in the ``~.autocron/`` directory. This directory will get created if it does not exist. If the filename represents an absolute path, then the absolute path is used. The path must be valide and existing.
+By default the database-file is stored in the ``~.autocron/`` directory. This directory will get created if it does not exist. If the filename represents an absolute path, then the absolute path is used. This path must exist.
 
 
 django
@@ -108,13 +110,14 @@ Keep in mind to register the django-application in the ``INSTALLED_APPS`` settin
 flask
 .....
 
-For flask autocron must get imported and started somewhere. In the following example ``autocron.start()`` is called at the end of the module: ::
+For flask autocron must get imported and started somewhere. In the following example ``autocron.start()`` is called after creating the flask-app: ::
 
     import time
     import autocron
     from flask import Flask
 
     app = Flask(__name__)
+    autocron.start("the_flask_app.db")
 
     @autocron.cron("* * * * *")
     def cronjob():
@@ -131,18 +134,13 @@ For flask autocron must get imported and started somewhere. In the following exa
         task_result = do_this_later()
         return f"Hello, TaskResult uuid: {task_result.uuid}"
 
-    autocron.start("the_flask_app.db")
-
-It would also work if autocron gets started right at the beginning of the module like: ::
-
-    app = Flask(__name__)
-    autocron.start("the_flask_app.db")
+It would also work if autocron gets started at the end of the module.
 
 
 bottle
 ......
 
-For a bottle-application at least two files are recommended to use autocron. This is because bottle may start the application as main-module and there is no reliable way to get the real name of the main-module from another module imported to the main module. For this reason autocron-decorated functions should not get defined in the main-module. For example here is a bottle-application in a file named "application.py" that may get started like ``$ python application.py``: ::
+For a bottle-application at least two files are recommended to use autocron. This is because bottle may start the application from the command line as the main-module and there is no reliable way to get the real name of the main-module from another module imported to the main-module. For this reason autocron-decorated functions should not get defined in the main-module. For example here is a bottle-application in a file named "application.py" that may get started like ``$ python application.py``: ::
 
     # application.py
     import autocron
@@ -179,7 +177,7 @@ This way autocron is able to import the functions later to execute them in anoth
 pyramid
 .......
 
-There are different ways to start pyramid for development or for production. Like bottle it is possible to start a pyramid development-server from the command line like ``$ python application.py`` and then for the same reasons the autocron decorated functions should get defined in another module that gets imported from the main-module: ::
+For development a pyramid application can get started from the command-line via ``$ python application.py``, like a bottle application. Then for the same reasons the autocron decorated functions should get defined in another module that gets imported from the main-module: ::
 
     # application.py
     from wsgiref.simple_server import make_server
@@ -203,7 +201,7 @@ There are different ways to start pyramid for development or for production. Lik
         server = make_server("0.0.0.0", 6543, app)
         server.serve_forever()
 
-In the above example ``autocron.start()`` is not called in the ``__main__`` block to get also started if the "application.py" module gets imported itself. The "utils.py" file is the same as in the bottle-example.
+In the above example ``autocron.start()`` is not called in the ``__main__`` block to get also started if the "application.py" module gets imported itself, i.e. after deployment for production. The "utils.py" file is the same as in the bottle-example.
 
 
 

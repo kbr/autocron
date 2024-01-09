@@ -23,8 +23,20 @@ Functions decorated with ``delay`` will return ``TaskResult`` instances (see bel
 TaskResult
 ..........
 
-cron-decorated functions return ``TaskResult`` instances. These are wrappers around the delayed result. The instances provide attributes like ``is_ready`` to indicate whether a result is available. Also there is the attribute ``uuid`` which can be used to access the database entry with the result later on.
+A ``delay``-decorated function returns a ``TaskResult`` instance. This is a wrapper around the delayed result. The instance provide attributes like ``is_ready`` to indicate whether a result is available: ::
 
+    @delay
+    def do_this_later():
+        # code here ...
+
+    task_result = do_this_later()
+    ...
+    if task_result.is_ready:
+        result = task_result.result
+    else:
+        # try to get the result later
+
+If autocron is inactive the decorated function will not return a ``TaskResult`` instance but the original return value of the function.
 
 .. autoclass:: TaskResult
     :members: has_error, is_ready, is_waiting, result
@@ -33,11 +45,11 @@ cron-decorated functions return ``TaskResult`` instances. These are wrappers aro
 cron
 ----
 
-A function decorated with ``cron`` should get never called from the application. Instead it will get called fron autocron periodically. Because of this a cron-decorated functions should not get arguments. To import the decorator autocron provides a shortcut: ::
+A function decorated with ``cron`` should get never called from the application. Instead it will get called fron autocron periodically. Because of this a ``cron``-decorated function should not get arguments. To import the decorator autocron provides a shortcut: ::
 
     from autocron import cron
 
-To register a cron-function the module of the function must get imported from the application: registration happens during Python import-time (aka. compile-time). There is no limitation of the number of cron-functions to register.
+To register a cron-function the module of the function must get imported from the application. There is no limitation of the number of cron-functions to register.
 
 
 .. automodule:: autocron.decorators
