@@ -55,3 +55,18 @@ To register a cron-function the module of the function must get imported from th
 .. automodule:: autocron.decorators
     :members: cron
 
+
+Example
+.......
+
+Let's consider a newsletter should get send on Monday and Wednesday at 9:30 am. This could be configured by means of a cron-string: ::
+
+    @cron("30 9 0,2 * *")
+    def send_newsletter():
+        ...
+
+but could also be configured by keyword arguments: ::
+
+    @cron(minutes=[30], hours=[9], dow=[0, 2])
+    def send_newsletter():
+        ...
