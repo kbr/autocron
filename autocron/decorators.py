@@ -1,5 +1,9 @@
-import importlib
-import types
+"""
+Implementatiom of the decorators ``cron`` and ``delay`` for running
+recurring task and to delegate long running tasks to a background
+process.
+"""
+
 import uuid
 
 from .schedule import CronScheduler

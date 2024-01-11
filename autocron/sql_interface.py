@@ -13,7 +13,6 @@ import datetime
 import pathlib
 import pickle
 import sqlite3
-import time
 import types
 
 
@@ -209,7 +208,7 @@ sqlite3.register_converter("datetime", datetime_converter)
 
 
 # pylint does not like instances with dynamic attributes:
-# pylint: disable=no-member
+# pylint: disable=attribute-defined-outside-init
 class HybridNamespace(types.SimpleNamespace):
     """
     A namespace-object with additional dictionary-like attribute access.
@@ -267,7 +266,9 @@ class TaskResult(HybridNamespace):
     @property
     def result(self):
         """
-        Shortcut to access the result. If the result is not available because the task still waits to get executed an AttributeError with the message "result not available" is raised.
+        Shortcut to access the result. If the result is not available
+        because the task still waits to get executed an AttributeError
+        with the message "result not available" is raised.
         """
         if self.status == TASK_STATUS_READY:
             return self.function_result
@@ -351,6 +352,7 @@ class TaskResult(HybridNamespace):
         return cls(data)
 
 
+# pylint: disable=too-many-public-methods
 class SQLiteInterface:
     """
     SQLite interface for application specific operations.
@@ -374,6 +376,7 @@ class SQLiteInterface:
 
     @property
     def db_name(self):
+        """Return hidden _db_name (because of the setter)"""
         return self._db_name
 
     @db_name.setter
@@ -391,10 +394,18 @@ class SQLiteInterface:
 
     @property
     def accept_registrations(self):
+        """
+        Return a boolean whether callables are allowed to get registered
+        in the database.
+        """
         return self._accept_registrations and not self.autocron_lock_is_set
 
     @accept_registrations.setter
     def accept_registrations(self, value):
+        """
+        Setter for the hidden _accept_registrations flag (because of the
+        getter)
+        """
         self._accept_registrations = value
 
     @property
@@ -662,6 +673,9 @@ class SQLiteInterface:
         self._execute(CMD_DELETE_TASK, [entry["rowid"]])
 
     def get_crontasks(self):
+        """
+        Return all crontasks as a list of HybridNamespace instances.
+        """
         cursor = self._execute(CMD_GET_CRONTASKS)
         return self._fetch_all_callable_entries(cursor)
 
@@ -691,6 +705,9 @@ class SQLiteInterface:
 
     @property
     def result_ttl(self):
+        """
+        Returns the new ttl as a datetime instance with an offset of now.
+        """
         return datetime.datetime.now() + self._result_ttl
 
     def register_result(
@@ -806,12 +823,21 @@ class SQLiteInterface:
         self._execute(CMD_SETTINGS_UPDATE, data)
 
     def get_monitor_idle_time(self):
+        """
+        Convenience function to get the monitor_idle_time from the settings.
+        """
         return self.get_settings().monitor_idle_time
 
     def get_worker_idle_time(self):
+        """
+        Convenience function to get the worker_idle_time from the settings.
+        """
         return self.get_settings().worker_idle_time
 
     def get_max_workers(self):
+        """
+        Convenience function to get the max_workers from the settings.
+        """
         return self.get_settings().max_workers
 
     @property

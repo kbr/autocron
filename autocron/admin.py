@@ -146,7 +146,7 @@ def _convert_flag(flag):
     Returns a boolean.
     """
     flag = flag.lower()
-    return flag == "true" or flag == "on"
+    return flag in {"true", "on"}
 
 
 def set_monitor_lock(flag):
@@ -270,6 +270,7 @@ def get_command_line_arguments():
 
 def main(args=None):
     """entry point."""
+    # pylint: disable=too-many-branches
     if not args:
         args = get_command_line_arguments()
     # like the worker just use the database "as is",
