@@ -3,6 +3,7 @@
 *.pyc
 *.egg-info
 __pycache__/*
+_notes.txt
 _todo.txt
 autocron.db
 build/
