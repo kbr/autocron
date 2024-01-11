@@ -5,12 +5,24 @@ For a full list of configuration settings see the documentation:
 http://www.sphinx-doc.org/en/master/config
 """
 
+import re
 from datetime import date
-# import autocron
+from pathlib import Path
+
+
+def get_version():
+    path = Path("..") / "autocron" / "__init__.py"
+    path = path.resolve()  # make it absolute
+    with open(path) as file:
+        content = file.read()
+    mo = re.search(r'\n\s*__version__\s*=\s*[\'"]([^\'"]*)[\'"]', content)
+    if mo:
+        return mo.group(1)
+    raise RuntimeError(f"Unable to find version string in {path}")
 
 
 project = "autocron"
-# version = autocron.__version__
+version = get_version()
 
 copyright = '2023 - {}, Klaus Bremer'.format(date.today().year)
 author = 'Klaus Bremer'
@@ -29,5 +41,3 @@ pygments_style = "default"
 html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['autocron.css']
-
-
