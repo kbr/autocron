@@ -112,6 +112,7 @@ flask
 
 For flask autocron must get imported and started somewhere. In the following example ``autocron.start()`` is called after creating the flask-app: ::
 
+    # application.py
     import time
     import autocron
     from flask import Flask
@@ -133,6 +134,8 @@ For flask autocron must get imported and started somewhere. In the following exa
     def hello_world():
         task_result = do_this_later()
         return f"Hello, TaskResult uuid: {task_result.uuid}"
+
+Consider the filename is "application.py" call flask as ``flask --app application run``.
 
 It also would work if autocron gets started at the end of the module.
 
