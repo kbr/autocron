@@ -2,9 +2,8 @@ Version History
 ===============
 
 
-Development
------------
 
+0.9.0 - 2024-01-11
+------------------
 
-- currently preparing the first release.
-
+- first public release
