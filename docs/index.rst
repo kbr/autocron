@@ -2,7 +2,7 @@
 autocron documentation
 ======================
 
-**autocron** is a simple asynchronous task handler to execute tasks in a separate process, not blocking the main application otherwise.
+**autocron** is a simple asynchronous background task library to execute tasks in a separate process, not blocking the main application otherwise.
 
 **autocron** does not need any dependencies beside the Python Standard-Library and is easy to install and easy to integrate into web-applications.
 

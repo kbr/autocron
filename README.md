@@ -4,11 +4,11 @@
 ![](https://img.shields.io/pypi/l/autocron.svg)
 
 
-**autocron** is a Python background task manager with no dependencies beside the standard library. It works out of the box with all common webframeworks like django, pyramid, flask, bottle, tornado or starlette.
+**autocron** is a Python background task library with no dependencies beside the standard library. It works out of the box with webframeworks like django, pyramid, flask, bottle, tornado or starlette.
 
-**autocron** makes it easy to delegate long running tasks to an external process or to manage and execute recurring tasks. No hassle with configuration-files.
+**autocron** makes it easy to delegate long running and recurring tasks to external processes. No hassle with configuration-files.
 
-**autocron** is designed for the vast majority of webapplications that don't need massive scaling. And don't want to add dependencies with even more sub-dependencies.
+**autocron** is designed for the vast majority of webapplications that don't need massive scaling. And don't want to add unnecessary dependencies.
 
 
 ## Installation
@@ -47,7 +47,7 @@ Here is a simple example how to use autocron with the flask web-framework that c
         return "delayed action triggered"
 ```
 
-After creating the flask ``app`` instance calling ``autocron.start(<databasename>)`` starts the background worker. The ``cron`` decorated ``cronjob()`` function will get executed every minute and the ``delay`` decorated ``do_this_later()`` function gets delegated to the background worker every time the application processes the ``/later`` url.
+After creating the flask ``app`` instance calling ``autocron.start(<databasename>)`` starts the background workers. The ``cron`` decorated ``cronjob()`` function will get executed every minute and the ``delay`` decorated ``do_this_later()`` function gets delegated to the background worker every time the application processes the ``/later`` url. Terminating the application will shut down the worker processes.
 
 More information and examples how to use autocron with other frameworks are at the documentation.
 
