@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
     autocron_lock INTEGER,
     monitor_idle_time REAL,
     worker_idle_time REAL,
-    worker_pids TEXT
+    worker_pids TEXT,
+    result_ttl INTEGER
 )
 """
 
@@ -162,14 +163,15 @@ INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
     :autocron_lock,
     :monitor_idle_time,
     :worker_idle_time,
-    :worker_pids
+    :worker_pids,
+    :result_ttl
 )
 """
 SETTINGS_COLUMN_SEQUENCE =\
     "rowid,max_workers,running_workers,"\
     "monitor_lock,autocron_lock,"\
     "monitor_idle_time,worker_idle_time,"\
-    "worker_pids"
+    "worker_pids,result_ttl"
 BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
 CMD_SETTINGS_GET_SETTINGS = f"""
     SELECT {SETTINGS_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_SETTINGS}"""
@@ -181,7 +183,8 @@ CMD_SETTINGS_UPDATE = f"""
         autocron_lock = ?,
         monitor_idle_time = ?,
         worker_idle_time = ?,
-        worker_pids = ?
+        worker_pids = ?,
+        result_ttl = ?
     WHERE rowid == ?"""
 
 
@@ -422,6 +425,7 @@ class SQLiteInterface:
         self._initialize_settings_table()
         settings = self.get_settings()
         self.autocron_lock_is_set = settings.autocron_lock
+        self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
 
     def _create_tables(self):
         """
@@ -446,6 +450,7 @@ class SQLiteInterface:
                 "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
                 "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
                 "worker_pids": DEFAULT_WORKER_PIDS,
+                "result_ttl": RESULT_TTL
             }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
@@ -797,6 +802,7 @@ class SQLiteInterface:
         - monitor_idle_time
         - worker_idle_time
         - worker_pids
+        - result_ttl
         - rowid (not a setting but included)
         """
         cursor = self._execute(CMD_SETTINGS_GET_SETTINGS)
@@ -821,6 +827,7 @@ class SQLiteInterface:
             settings.monitor_idle_time,
             settings.worker_idle_time,
             settings.worker_pids,
+            settings.result_ttl,
             settings.rowid
         )
         self._execute(CMD_SETTINGS_UPDATE, data)
