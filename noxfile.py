@@ -28,11 +28,18 @@ def build(session):
     session.run("python", "setup.py", "sdist", "bdist_wheel")
 
 
+@nox.session(name="check-twine", python=PYTHON_DEVELOPMENT_VERSION)
+def check_twine(session):
+    session.install("-e", ".")
+    session.install("twine")
+    session.run("twine", "check", "dist/*")
+
+
 @nox.session(name="upload-to-pypi", python=PYTHON_DEVELOPMENT_VERSION)
 def uppload_to_pypi(session):
     session.install("-e", ".")
     session.install("twine")
-    session.run("twine", "upload", "dist/*")
+    session.run("twine", "upload", "dist/*")  #, "--verbose")
 
 @nox.session
 def sphinx(session):

@@ -14,6 +14,7 @@
 ## Installation
 
 For installation use pip:
+
 ```
     $ pip install autocron
 ```
