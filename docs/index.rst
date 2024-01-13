@@ -21,7 +21,38 @@ Installation
     $ pip install autocron
 
 
-**What next?** Select your web-application of choice and learn how easy it is to :ref:`integrate<integration>` autocron.
+Quickstart
+----------
+
+autocron provides two decorators: ``cron`` for recurring tasks and ``delay`` to delegate a long running task to a background process.
+
+Here is a simple example how to use autocron with the flask web-framework that can be run with ``$ flak --app application run``: ::
+
+    # application.py
+
+    import autocron
+    from flask import Flask
+
+    app = Flask(__name__)
+    autocron.start("the_flask_app.db")
+
+    @autocron.cron("* * * * *")
+    def cronjob():
+        # do something from time to time ...
+
+    @autocron.delay
+    def do_this_later():
+        # time consuming task here ...
+
+    @app.route("/later")
+    def later():
+        do_this_later()
+        return "delayed action triggered"
+
+
+Calling ``autocron.start()`` starts the background workers. When the application stops, the workers are stopped too.
+
+**What next?** Select your web-application of choice and learn how easy it is to :ref:`integrate<integration>` autocron to different web-frameworks and more details.
 
 
 History
