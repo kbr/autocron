@@ -1,3 +1,4 @@
+.. _application-iterface:
 
 Application Interface
 =====================
@@ -91,3 +92,5 @@ Calling a ``delay``-decorated function will return a ``TaskResult`` instance. Th
 
 .. autoclass:: autocron.sql_interface.SQLiteInterface
     :members: get_results
+
+Results are deleted from the database after a timespan given by ``result_ttl``. This value defaults to 1800 seconds (30 minutes) and can get set by the admin-interface. Do not missuse the autocron database as a long-term storage for results. Instead use another dedicated database.

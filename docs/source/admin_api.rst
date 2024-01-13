@@ -13,7 +13,8 @@ Admin Interface
     [--set-worker-idle-time WORKER_IDLE_TIME]
     [--set-monitor-idle-time MONITOR_IDLE_TIME]
     [--set-monitor-lock MONITOR_LOCK]
-    [--set-autocron-lock AUTOCRON_LOCK] [-t] [-d] [-c] [-r] database
+    [--set-autocron-lock AUTOCRON_LOCK]
+    [--set-result-ttl RESULT_TTL] [-t] [-d] [-c] [-r] database
 
 
 ``database:``
@@ -54,6 +55,9 @@ Admin Interface
 
 ``--set-worker-idle-time:``
     set the idle time (in seconds) for the worker processes. If no tasks on due the worker(s) will sleep for the given time before checking again for new tasks. Defaults to 2 seconds. On busy sites this can be used for fine-tuning.
+
+``--set-result-ttl:``
+    set the result time to life (ttl, in seconds). Stored results are deleted after this timespan. A change to take effect needs a restart of the application. The change will applied to new results. Already stored results keep the previous assigned ttl. Defauts to 1800 seconds (30 minutes).
 
 ``-t, --get-tasks:``
     list all waiting tasks.

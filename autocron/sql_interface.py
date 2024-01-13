@@ -360,7 +360,6 @@ class SQLiteInterface:
     """
     SQLite interface for application specific operations.
     This class is a Singleton.
-
     """
 
     _instance = None
