@@ -16,12 +16,12 @@ All configurations are preset with useful values and can get inspected and modif
 Installation
 ------------
 
-The **autocron** package is available on `PyPi <https://pypi.org/project/autocron/>`_ and installable by `pip <https://pypi.org/project/pip/>`_:  ::
+**autocron** requires Python >= 3.8. The package is available on `PyPi <https://pypi.org/project/autocron/>`_ and installable by `pip <https://pypi.org/project/pip/>`_:  ::
 
     $ pip install autocron
 
-(autocron requires Python >= 3.8)
 
+**What next?** Select your web-application of choice and learn how easy it is to :ref:`integrate<integration>` autocron.
 
 
 History

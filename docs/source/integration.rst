@@ -1,7 +1,9 @@
+.. _integration:
+
 Integration
 ===========
 
-**autocron** is designed for easy usage and integration to web-applications. Just apply decorators and start the background workers as described in the next sections. More details are in the chapter :ref:`Application Interface<application-iterface>`.
+**autocron** is designed for easy usage and integration to web-applications. Just apply decorators and start the background workers as described in the next sections.
 
 
 Decorators
@@ -31,6 +33,8 @@ Decorators
     $ autocron <database-filename> --set-autocron-lock on
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again set the flag to ``off`` (``true`` and ``false`` are also possible as arguments).
+
+More details about the decorators are in the chapter :ref:`Application Interface<application-iterface>`.
 
 
 Application-Integration
