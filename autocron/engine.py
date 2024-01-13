@@ -79,10 +79,9 @@ def run_worker_monitor(exit_event, database_file):
 
 class Engine:
     """
-    The Engine is the entry-point for autocron. In the ``__init__.py``
-    module an instance of Engine gets created for calling the
-    ``start()`` method to start the monitor thread. The monitor-thread
-    will start the workers.
+    The Engine is the entry-point for autocron. Starting the engine will
+    start the monitor thread. The monitor-thread in turn starts and
+    supervise the workers. (The interface argument is used for testing.)
     """
     def __init__(self, interface=None):
         # the ìnterface argument is for testing. In production this
@@ -110,15 +109,20 @@ class Engine:
 
     def start(self, database_file):
         """
-        Starts the monitor in case no other monitor is already running
-        and the configuration indicates that autocron is active. To
-        start the engine, a project-name is required. The project-name
-        represents the name of the directory in '~/.autocron' where
-        project-specific data are stored (like the database).
-        Returns a boolean: True if a monitor-thread has been started and
-        False otherwise. Returning False does not mean that no monitor
-        is running. There could be a monitor-thread in another process
-        that has started earlier.
+        Starts the autocron worker in case autocron is active and no
+        other application process has already started the workers. The
+        *database_file* argument is a string with the name of the
+        database to use (like "the_application.db") or a Path instance.
+        If the name represents a relative path, the database is stored
+        in the ``~/.autocron`` directory. This directory will get
+        created if not already existing. If the name represents an
+        absolute path, then this path will be used as is. In this case
+        all directories of the path must exist.
+
+        The function returns a boolean: True if workers have been
+        started and False otherwise. A return value of False does not
+        mean, that no workers are running – another application process
+        may have be first.
         """
         self.interface.init_database(database_file)
         if (
@@ -142,7 +146,7 @@ class Engine:
 
     def stop(self):
         """
-        Shut down the monitor thread which in turn will stop all running
+        Shut down the monitor-thread which in turn will stop all running
         workers. Also release the monitor_lock flag.
         """
         if self.monitor_thread:
@@ -163,8 +167,9 @@ class Engine:
 
     def _terminate(self, signalnum, stackframe=None):
         """
-        Terminate autocron by calling the engine.stop method. Afterward
-        reraise the signal again for the original signal-handler.
+        Terminate autocron by calling the engine.stop() method.
+        Afterward reraise the signal again for the original
+        signal-handler.
         """
         # stackframe may be given to the signal-handler, but is unused
         # pylint: disable=unused-argument

@@ -22,7 +22,9 @@ def get_version():
 
 
 project = "autocron"
-version = get_version()
+release = get_version()
+version = '.'.join(release.split('.')[:-1])
+html_title = f"{project}<br /><small>{release}</small>"
 
 copyright = '2023 - {}, Klaus Bremer'.format(date.today().year)
 author = 'Klaus Bremer'

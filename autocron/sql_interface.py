@@ -739,7 +739,10 @@ class SQLiteInterface:
         self._execute(CMD_STORE_RESULT, data)
 
     def get_results(self):
-        """Generic method to return all results"""
+        """
+        Generic method to return all results as a list of TaskResult
+        instances.
+        """
         cursor = self._execute(CMD_GET_RESULTS)
         rows = cursor.fetchall()
         return [TaskResult.from_data_tuple(row) for row in rows]

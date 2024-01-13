@@ -291,8 +291,8 @@ History
    :maxdepth: 1
    :caption: Contents:
 
-   source/decorators
-   source/admin
+   source/application_api
+   source/admin_api
    source/version_history
    source/license
 
