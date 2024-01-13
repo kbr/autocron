@@ -369,7 +369,7 @@ class SQLiteInterface:
 
     def __init__(self):
         self._preregistered_tasks = []
-        self._result_ttl = datetime.timedelta(minutes=RESULT_TTL)
+        self._result_ttl = datetime.timedelta(seconds=RESULT_TTL)
         self._accept_registrations = True
         self._db_name = None
         self.autocron_lock_is_set = None
