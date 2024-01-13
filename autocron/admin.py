@@ -140,6 +140,17 @@ def set_monitor_idle_time(idle_time):
     print(f"Set monitor idle time to {idle_time} seconds")
 
 
+def set_result_ttl(ttl):
+    """
+    Set the result time to life in seconds. ttl is an integer. This is
+    the timespan a result will get stored in the database.
+    """
+    settings = interface.get_settings()
+    settings.result_ttl = ttl
+    interface.set_settings(settings)
+    print(f"Set result-ttl to {ttl} seconds")
+
+
 def _convert_flag(flag):
     """
     flag can be a string with 'true'', 'false' or 'on'', 'off''.
@@ -242,6 +253,12 @@ def get_command_line_arguments():
         help="set autocron lock flag: [true|false or on|off]."
     )
     parser.add_argument(
+        "--set-result-ttl",
+        dest="result_ttl",
+        type=int,
+        help="set result time to life in seconds."
+    )
+    parser.add_argument(
         "-t", "--get-tasks",
         dest="get_tasks",
         action="store_true",
@@ -300,6 +317,8 @@ def main(args=None):
         set_worker_idle_time(args.worker_idle_time)
     elif args.monitor_idle_time:
         set_worker_idle_time(args.monitor_idle_time)
+    elif args.result_ttl:
+        set_result_ttl(args.result_ttl)
     else:
         print_usage()
 
