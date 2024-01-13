@@ -2,6 +2,13 @@ Version History
 ===============
 
 
+0.9.1 - 2024-01-13
+------------------
+
+- Enhanced documentation structure
+- admin can set result-ttl
+- minor bugfixes
+
 
 0.9.0 - 2024-01-11
 ------------------
