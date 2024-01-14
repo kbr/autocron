@@ -308,3 +308,27 @@ def get_next_value(value, values):
         if item > value:
             return item
     return values[0]
+
+
+def get_periodic_schedule(task):
+    """
+    Check whether the tasks runs every n minutes or every n hours.
+    Returns a new schedule or None if the next schedule must get
+    calculated differently
+    """
+    minutes = None
+    starnum = task.crontab.count("*")
+    if starnum == 5:
+        minutes = 1
+    elif starnum == 4:
+        items = task.crontab.split()
+        try:
+            minutes = int(items[0])
+        except ValueError:
+            try:
+                minutes = int(items[1]) * 60
+            except ValueError:
+                pass
+    if minutes:
+        return task.schedule + datetime.timedelta(minutes=minutes)
+    return None

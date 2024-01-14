@@ -3,10 +3,17 @@ test_schedule.py
 
 Adapted from pytest
 """
+
 import unittest
 from datetime import datetime as dt
+from types import SimpleNamespace
 
-from autocron.schedule import CronScheduler, get_next_value
+
+from autocron.schedule import (
+    CronScheduler,
+    get_next_value,
+    get_periodic_schedule,
+)
 
 
 class TestScheduler(unittest.TestCase):
@@ -168,3 +175,83 @@ class TestScheduler(unittest.TestCase):
         ]:
             cs = CronScheduler(crontab=crontab, last_schedule=schedule)
             assert result == cs.get_next_schedule()
+
+
+class TestTimeshift(unittest.TestCase):
+
+    def test_timeshift_every_minute(self):
+        """
+        Test that calculating a new schedule for task running every
+        minutes not have a timeshift.
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 10, 1)
+        task = SimpleNamespace()
+        task.crontab = "* * * * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result == next_schedule
+
+    def test_timeshift_every_ten_minute(self):
+        """
+        Test that calculating a new schedule for task running every
+        five minutes do not have a timeshift.
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 10, 10)
+        task = SimpleNamespace()
+        task.crontab = "10 * * * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result == next_schedule
+
+    def test_timeshift_every_five_and_ten_minute(self):
+        """
+        Test shoould not match because not aequidistant periodic
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 10, 10)
+        task = SimpleNamespace()
+        task.crontab = "5,10 * * * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result is None
+
+    def test_timeshift_every_hour(self):
+        """
+        Test that calculating a new schedule for task running every
+        hours do not have a timeshift.
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 11, 0)
+        task = SimpleNamespace()
+        task.crontab = "* 1 * * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result == next_schedule
+
+    def test_timeshift_every_two_hour(self):
+        """
+        Test that calculating a new schedule for task running every
+        two hours do not have a timeshift.
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 12, 0)
+        task = SimpleNamespace()
+        task.crontab = "* 2 * * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result == next_schedule
+
+    def test_timeshift_every_monday(self):
+        """
+        Test should not match as it is not about minutes and hours.
+        """
+        schedule = dt(2024, 1, 1, 10, 0)
+        next_schedule = dt(2024, 1, 1, 12, 0)
+        task = SimpleNamespace()
+        task.crontab = "* * 0 * *"
+        task.schedule = schedule
+        result = get_periodic_schedule(task)
+        assert result is None
+
