@@ -4,7 +4,6 @@ test_schedule.py
 Adapted from pytest
 """
 
-import unittest
 from datetime import datetime as dt
 from types import SimpleNamespace
 
