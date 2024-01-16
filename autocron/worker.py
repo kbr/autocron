@@ -129,10 +129,7 @@ class Worker:
             if schedule is None:
                 scheduler = CronScheduler(crontab=task.crontab)
                 schedule = scheduler.get_next_schedule()
-            self.interface.update_crontask_schedule(
-                rowid=task.rowid,
-                schedule=schedule
-            )
+            self.interface.update_task_schedule(task, schedule)
         else:
             # not a cronjob: delete the task from the db
             self.interface.delete_callable(task)
