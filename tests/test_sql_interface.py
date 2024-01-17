@@ -12,6 +12,8 @@ import time
 import unittest
 import uuid
 
+import pytest
+
 from autocron import decorators
 from autocron import sql_interface
 from autocron import worker
@@ -41,6 +43,331 @@ def tst_delay():
     return 42
 
 
+@pytest.fixture
+def raw_interface():
+    """
+    Returns a new uninitialised database instance.
+    """
+    # set class attribute to None to not return a singleton
+    sql_interface.SQLiteInterface._instance = None
+    interface = sql_interface.SQLiteInterface()
+    yield interface
+    if interface.db_name:
+        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+
+
+@pytest.fixture
+def interface():
+    """
+    Returns a new initialised database instance.
+    """
+    # set class attribute to None to not return a singleton
+    sql_interface.SQLiteInterface._instance = None
+    interface = sql_interface.SQLiteInterface()
+    interface.init_database(db_name=TEST_DB_NAME)
+    yield interface
+    if interface.db_name:
+        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+
+
+def test_hybrid_namespace_dict_access():
+    """
+    HybridNamespace should behave like a dict.
+    """
+    hns = sql_interface.HybridNamespace()
+    hns["one"] = 1
+    assert hns["one"] == 1
+
+
+def test_hybrid_namespace_attribute_access():
+    """
+    HybridNamespace should behave like an object with attributes.
+    """
+    hns = sql_interface.HybridNamespace()
+    hns.one = 1
+    assert hns.one == 1
+
+
+def test_hybrid_namespace_mixed_access():
+    """
+    HybridNamespace should behave like a dict and an object with attributes.
+    """
+    hns = sql_interface.HybridNamespace()
+    hns.one = 1
+    assert hns["one"] == 1
+    hns["two"] = 2
+    assert hns.two == 2
+
+
+def test_hybrid_namespace_init():
+    """
+    HybridNamespace can get initialised with a dict.
+    """
+    data = {"one": 1, "two": 2}
+    hns = sql_interface.HybridNamespace(data)
+    assert hns["one"] == hns.one
+    assert hns.two == hns["two"]
+
+
+@pytest.mark.parametrize(
+    "db_name, parent_dir", [
+        ("db_name.db", ".autocron"),
+        ("path/db_name.db", ".autocron"),
+        ("/path/db_name.db", "path")
+    ]
+)
+def test_storage_location(db_name, parent_dir, raw_interface):
+    """
+    Test for storage location: a relative path gets stored to ~.autocron
+    and an absolute path as is.
+    """
+    raw_interface._set_storage_location(db_name)
+    parent = raw_interface.db_name.parent
+    assert parent_dir == parent.stem
+
+
+def test_store_task(interface):
+    """
+    Test to store a task and find this task later on.
+    """
+    # no task stored in fresh database
+    entries = interface.get_tasks()
+    assert bool(entries) is False
+
+    # store a task and retrieve the task
+    interface.register_callable(tst_callable)
+    entries = interface.get_tasks()
+    assert bool(entries) is True
+
+
+def test_store_multiple_tasks(interface):
+    """
+    Store more than one task and find them all later.
+    """
+    functions = [tst_callable, tst_multiply, tst_multiply]
+    for func in functions:
+        interface.register_callable(func)
+    entries = interface.get_tasks()
+    assert len(entries) == len(functions)
+
+
+def test_task_signature(interface):
+    """
+    Tasks are HybridNamespaces storing callables by their name and
+    corresponding module.
+    """
+    interface.register_callable(tst_callable)
+    task = interface.get_tasks()[0]  # just a single entry
+
+    # the Task is a HybridNamespace
+    assert isinstance(task, sql_interface.HybridNamespace) is True
+
+    # and known the name and the module of the callable
+    assert task["function_module"] == tst_callable.__module__
+    assert task["function_name"] == tst_callable.__name__
+
+
+def test_task_arguments(interface):
+    """
+    Arguments are stored as blobs. Test to store and retrieve the
+    arguments with the original types and values.
+    """
+    args = [42, 3.141, ("one", "two")]
+    kwargs = {"answer": 41, 10: "ten", "data": [1, 2, {"pi": 3.141, "g": 9.81}]}
+    interface.register_callable(tst_callable, args=args, kwargs=kwargs)
+    task = interface.get_tasks()[0]  # just a single entry
+
+    # check the unpickled blobs:
+    assert task.args == args
+    assert task.kwargs == kwargs
+
+
+def test_get_task_on_due(interface):
+    """
+    Store two tasks, one is on due. Retrieve the task on due.
+    """
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    interface.register_callable(tst_add, schedule=now-delta)
+    interface.register_callable(tst_multiply, schedule=now+delta)
+
+    # add() is on due:
+    entries = interface.get_tasks_on_due()
+    assert len(entries) == 1
+    task = entries[0]
+    assert task.function_name == tst_add.__name__
+
+
+def test_delete_task(interface):
+    """
+    The delete_callable() method takes a task as argument that must
+    provide a row-id. Store two tasks, one on due. Select the one on due
+    and delete this task. The other task should be still there. This is
+    what happens after execution of a delayed task.
+    """
+
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    interface.register_callable(tst_add, schedule=now-delta)
+    interface.register_callable(tst_multiply, schedule=now+delta)
+
+    # add() is on due: select and delete the task
+    task = interface.get_tasks_on_due()[0]  # single entry, tested elsewere
+    interface.delete_callable(task)
+
+    # multiply must have survived:
+    tasks = interface.get_tasks()
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task.function_name == tst_multiply.__name__
+
+
+def test_get_tasks_by_signature(interface):
+    """
+    Callables can get stored multiple times for delayed execution and
+    can get also selected by their names and modules (the signature).
+    """
+    functions = [tst_multiply, tst_add, tst_multiply]
+    for function in functions:
+        interface.register_callable(function)
+
+    # select all tst_multiply tasks:
+    tasks = interface.get_tasks_by_signature(tst_multiply)
+    assert len(tasks) == functions.count(tst_multiply)
+    for task in tasks:
+        assert task.function_name == tst_multiply.__name__
+
+
+def test_get_task_on_due_and_set_status(interface):
+    """
+    Calling interface.get_tasks_on_due() accepts aguments for filtering
+    by status and setting a new status.
+    """
+    # register two callables on due, default state is WAITING
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    functions = [tst_add, tst_multiply]
+    for function in functions:
+        interface.register_callable(function, schedule=now-delta)
+
+    # access this WAITING task on due and change state to PROCESSING:
+    tasks = interface.get_tasks_on_due(
+                status=sql_interface.TASK_STATUS_WAITING,
+                new_status=sql_interface.TASK_STATUS_PROCESSING
+            )
+    assert len(tasks) == len(functions)
+
+    # try to get these functions again does not work
+    # because of the status change
+    tasks = interface.get_tasks_on_due(
+                status=sql_interface.TASK_STATUS_WAITING
+            )
+    assert bool(tasks) is False
+
+    # but the tasks are still stored:
+    tasks = interface.get_tasks()
+    assert len(tasks) == len(functions)
+
+
+def test_update_task_schedule(interface):
+    """
+    A task can get a new schedule. This is usefull for crontasks. Doing
+    a schedule update also set the task-state to WAITING.
+    """
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    interface.register_callable(tst_callable, schedule=now-delta)
+
+    # fetch the task on due and update the schedule to be in the future
+    tasks = interface.get_tasks_on_due(
+                status=sql_interface.TASK_STATUS_WAITING,
+                new_status=sql_interface.TASK_STATUS_PROCESSING
+            )
+    task = tasks[0]
+    new_schedule = now + delta
+    interface.update_task_schedule(task, new_schedule)
+
+    # no tasks on due any more:
+    tasks = interface.get_tasks_on_due()
+    assert bool(tasks) is False
+
+    # but the task is waiting:
+    task = interface.get_tasks()[0]
+    assert task.schedule == new_schedule
+    assert task.status == sql_interface.TASK_STATUS_WAITING
+
+
+def test_get_result_by_invalid_uuid(interface):
+    """
+    Accessing a result entry by an invalid uuid should return None.
+    """
+    # no result in the database, so this uuid is invalide
+    uuid_ = uuid.uuid4().hex
+    result = interface.get_result_by_uuid(uuid_)
+    assert result is None
+
+
+def test_get_waiting_result(interface):
+    """
+    Once registered a result entry is available but in waiting state
+    because the result-value is not available. The result is of type
+    TaskResult.
+    """
+    uuid_ = uuid.uuid4().hex
+    interface.register_result(tst_add, uuid=uuid_)
+
+    # fetch the result in waiting state:
+    result = interface.get_result_by_uuid(uuid_)
+    assert result is not None
+    assert isinstance(result, TaskResult) is True
+    assert result.is_waiting is True
+    assert result.function_result is None
+
+
+def test_ready_result(interface):
+    """
+    A registered result in waiting state can updated with a result. The
+    state then changes to ready.
+    """
+    uuid_ = uuid.uuid4().hex
+    interface.register_result(tst_add, uuid=uuid_)
+
+    # now provide a result:
+    answer = 42
+    interface.update_result(uuid_, result=answer)
+
+    # fetch the result that is in ready state now
+    result = interface.get_result_by_uuid(uuid_)
+    assert result is not None
+    assert isinstance(result, TaskResult) is True
+    assert result.is_waiting is False
+    assert result.is_ready is True
+    assert result.function_result == answer
+
+
+def test_result_state(interface):
+    """
+    A TaskResult can update itself. (doing the query internal.)
+    """
+
+    uuid_ = uuid.uuid4().hex
+    interface.register_result(tst_add, uuid=uuid_)
+
+    # fetch result which is in waiting state
+    result = interface.get_result_by_uuid(uuid_)
+    result.interface = interface
+    assert result.is_ready is False
+
+    # now provide a result:
+    answer = 42
+    interface.update_result(uuid_, result=answer)
+
+    # and check the TaskResult object again:
+    assert result.is_ready is True
+    assert result.function_result == answer
+
+
+
 class TestSQLInterface(unittest.TestCase):
 
     def setUp(self):
@@ -53,28 +380,28 @@ class TestSQLInterface(unittest.TestCase):
         pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
         self.interface._result_ttl = self._result_ttl
 
-    def test_storage_location(self):
+    def _test_storage_location(self):
         path = pathlib.Path.home() / sql_interface.DEFAULT_STORAGE / TEST_DB_NAME
         assert self.interface.db_name == path
         # don't allow setting the db a second time:
         self.interface.init_database(db_name=ANOTHER_FILE_NAME)
         assert self.interface.db_name == path
 
-    def test_storage_location_absolute(self):
+    def _test_storage_location_absolute(self):
         pathlib.Path(self.interface.db_name).unlink()
         self.interface.db_name = None
         path = pathlib.Path.cwd() / ANOTHER_FILE_NAME
         self.interface.init_database(db_name=path)
         assert self.interface.db_name == path
 
-    def test_storage(self):
+    def _test_storage(self):
         entries = self.interface.get_tasks_on_due()
         self.assertFalse(list(entries))
         self.interface.register_callable(tst_callable)
         entries = self.interface.get_tasks_on_due()
         assert len(entries) == 1
 
-    def test_entry_signature(self):
+    def _test_entry_signature(self):
         self.interface.register_callable(tst_callable)
         entries = self.interface.get_tasks_on_due()
         obj = entries[0]
@@ -82,7 +409,7 @@ class TestSQLInterface(unittest.TestCase):
         assert obj["function_module"] == tst_callable.__module__
         assert obj["function_name"] == tst_callable.__name__
 
-    def test_arguments(self):
+    def _test_arguments(self):
         args = ["pi", 3.141]
         kwargs = {"answer": 41, 10: "ten"}
         crontab = "* 1 * * *"
@@ -95,7 +422,7 @@ class TestSQLInterface(unittest.TestCase):
         assert obj["args"] == args
         assert obj["kwargs"] == kwargs
 
-    def test_get_tasks(self):
+    def _test_get_tasks(self):
         # test the generic function to select all tasks:
         schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
         self.interface.register_callable(tst_add, schedule=schedule)
@@ -105,7 +432,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = self.interface.get_tasks()
         assert len(entries) == 3
 
-    def test_schedules_get_one_of_two(self):
+    def _test_schedules_get_one_of_two(self):
         # register two callables, one with a schedule in the future
         schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
         self.interface.register_callable(tst_add, schedule=schedule)
@@ -114,7 +441,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = self.interface.get_tasks_on_due()
         assert len(entries) == 1
 
-    def test_schedules_get_two_of_two(self):
+    def _test_schedules_get_two_of_two(self):
         # register two callables, both scheduled in the present or past
         schedule = datetime.datetime.now() - datetime.timedelta(seconds=10)
         self.interface.register_callable(tst_add, schedule=schedule)
@@ -123,7 +450,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = self.interface.get_tasks_on_due()
         assert len(entries) == 2
 
-    def test_delete(self):
+    def _test_delete(self):
         # register two callables, one with a schedule in the future
         now = datetime.datetime.now()
         future_schedule = now + datetime.timedelta(milliseconds=2)
@@ -143,7 +470,7 @@ class TestSQLInterface(unittest.TestCase):
         entry = entries[0]
         assert entry["function_name"] == tst_add.__name__
 
-    def test_get_task_by_signature(self):
+    def _test_get_task_by_signature(self):
         # register two callables, one with a schedule in the future
         schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
         self.interface.register_callable(tst_add, schedule=schedule)
@@ -155,7 +482,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = self.interface.get_tasks_by_signature(tst_add)
         assert len(entries) == 1
 
-    def test_get_tasks_by_signature(self):
+    def _test_get_tasks_by_signature(self):
         # it is allowed to register the same callables multiple times.
         # regardless of the schedule `get_tasks_by_signature()` should return
         # all entries.
@@ -165,7 +492,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = list(self.interface.get_tasks_by_signature(tst_add))
         assert len(entries) == 2
 
-    def test_get_task_on_due_and_set_status(self):
+    def _test_get_task_on_due_and_set_status(self):
         # set two task which are on due with status WAITING (default).
         # Select them by setting the status to PROCESSED.
         # A second selection should not work.
@@ -187,7 +514,7 @@ class TestSQLInterface(unittest.TestCase):
         entries = self.interface.get_tasks()
         assert len(entries) == 2
 
-    def test_update_schedule(self):
+    def _test_update_schedule(self):
         # entries like cronjobs should not get deleted from the tasks
         # but updated with the next schedule
         schedule = datetime.datetime.now()
@@ -199,7 +526,7 @@ class TestSQLInterface(unittest.TestCase):
         entry = self.interface.get_tasks_by_signature(tst_add)[0]
         assert entry["schedule"] == next_schedule
 
-    def test_update_crontask(self):
+    def _test_update_crontask(self):
         """
         When a crontask is selected for handling because it is 'on due',
         the status changes from WAITING to PROCESSING. After
@@ -222,17 +549,17 @@ class TestSQLInterface(unittest.TestCase):
         # get reset to WAITING again:
         schedule = datetime.datetime.now()
         rowid = task.rowid
-        self.interface.update_crontask_schedule(rowid, schedule)
+        self.interface.update_task_schedule(task, schedule)
         task = self.interface.get_tasks_by_signature(tst_add)[0]
         assert task.status == sql_interface.TASK_STATUS_WAITING
 
-    def test_result_by_uuid_no_result(self):
+    def _test_result_by_uuid_no_result(self):
         # result should be None if no entry found
         uuid_ = uuid.uuid4().hex
         result = self.interface.get_result_by_uuid(uuid_)
         assert result is None
 
-    def test_result_by_uuid_result_registered(self):
+    def _test_result_by_uuid_result_registered(self):
         uuid_ = uuid.uuid4().hex
         self.interface.register_result(tst_add, uuid=uuid_)
         result = self.interface.get_result_by_uuid(uuid_)
@@ -240,7 +567,7 @@ class TestSQLInterface(unittest.TestCase):
         assert result is not None
         assert result.is_waiting is True
 
-    def test_update_result_no_error(self):
+    def _test_update_result_no_error(self):
         answer = 42
         uuid_ = uuid.uuid4().hex
         self.interface.register_result(tst_add, uuid=uuid_)
@@ -572,7 +899,7 @@ class TestDelayDecorator(unittest.TestCase):
         assert result.result == 42  # 40 + 2
 
 
-class TestHybridNamespace(unittest.TestCase):
+class x_TestHybridNamespace(unittest.TestCase):
 
     def setUp(self):
         self.data = {"pi": 3.141, "answer": 42}
