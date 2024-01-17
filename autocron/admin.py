@@ -292,9 +292,8 @@ def main(args=None):
     # pylint: disable=too-many-branches
     if not args:
         args = get_command_line_arguments()
-    # like the worker just use the database "as is",
-    # by not running the initialization.
-    interface.db_name = args.database
+    # create database if not existing
+    interface.init_database(db_name=args.database)
     if args.info:
         report_info()
     elif args.reset_defaults:
