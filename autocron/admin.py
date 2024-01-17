@@ -12,6 +12,7 @@ from autocron.sql_interface import (
     DEFAULT_RUNNING_WORKERS,
     DEFAULT_MONITOR_LOCK,
     DEFAULT_AUTOCRON_LOCK,
+    DEFAULT_RESULT_TTL,
 )
 
 interface = SQLiteInterface()
@@ -105,6 +106,7 @@ def reset_defaults():
     settings.running_workers = DEFAULT_RUNNING_WORKERS
     settings.monitor_lock = DEFAULT_MONITOR_LOCK
     settings.autocron_lock = DEFAULT_AUTOCRON_LOCK
+    settings.result_ttl = DEFAULT_RESULT_TTL
     interface.set_settings(settings)
     print("\nReset settings default values:")
     report_info()

@@ -92,9 +92,6 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_RESULT}
 )
 """
 
-# Storage time (time to live) for results in seconds
-RESULT_TTL = 1800
-
 CMD_STORE_RESULT = f"""
 INSERT INTO {DB_TABLE_NAME_RESULT} VALUES
 (
@@ -153,6 +150,8 @@ DEFAULT_AUTOCRON_LOCK = 0
 DEFAULT_MONITOR_IDLE_TIME = 5.0  # seconds
 DEFAULT_WORKER_IDLE_TIME = 2.0  # seconds
 DEFAULT_WORKER_PIDS = ""
+DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) for results in seconds
+
 
 CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
@@ -371,7 +370,7 @@ class SQLiteInterface:
 
     def __init__(self):
         self._preregistered_tasks = []
-        self._result_ttl = datetime.timedelta(seconds=RESULT_TTL)
+        self._result_ttl = datetime.timedelta(seconds=DEFAULT_RESULT_TTL)
         self._accept_registrations = True
         self._db_name = None
         self.autocron_lock_is_set = None
@@ -449,7 +448,7 @@ class SQLiteInterface:
                 "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
                 "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
                 "worker_pids": DEFAULT_WORKER_PIDS,
-                "result_ttl": RESULT_TTL
+                "result_ttl": DEFAULT_RESULT_TTL
             }
             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
