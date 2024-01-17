@@ -2,6 +2,12 @@ Version History
 ===============
 
 
+development
+-----------
+
+- fixed reset result_ttl
+
+
 0.9.2 - 2024-01-14
 ------------------
 
