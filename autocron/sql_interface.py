@@ -221,8 +221,8 @@ class HybridNamespace(types.SimpleNamespace):
         Set initial values.
         If data is given, it must be a dictionary.
         """
-        if data is not None:
-            self.__dict__.update(data)
+        data = data if data else {}
+        super().__init__(**data)
 
     def __getitem__(self, name):
         return self.__dict__[name]
