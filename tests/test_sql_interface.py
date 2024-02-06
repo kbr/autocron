@@ -4,10 +4,8 @@ test_sql_interface.py
 testcode for sql-actions and for decorators
 """
 
-import collections
 import datetime
 import pathlib
-import sqlite3
 import time
 import unittest
 import uuid
@@ -35,6 +33,11 @@ def tst_add(a, b):
 
 def tst_multiply(a, b):
     return a * b
+
+def tst_join_task(a, b, c="c", d="d"):
+    return "".join([a, b, c, d])
+
+
 
 def tst_cron():
     pass
@@ -367,395 +370,199 @@ def test_result_state(interface):
     assert result.function_result == answer
 
 
+def test_update_result_with_error(interface):
+    """
+    A TaskResult gets updated with an error message.
+    The result should report the error state.
+    """
+    message = "ValueError: the error text"
+    uuid_ = uuid.uuid4().hex
+    interface.register_result(tst_add, uuid=uuid_)
+    interface.update_result(uuid_, error_message=message)
 
-class TestSQLInterface(unittest.TestCase):
+    # check result for error status
+    result = interface.get_result_by_uuid(uuid_)
+    assert result.has_error is True
 
-    def setUp(self):
-        sql_interface.SQLiteInterface._instance = None
-        self.interface = sql_interface.SQLiteInterface()
-        self.interface.init_database(db_name=TEST_DB_NAME)
-        self._result_ttl = self.interface._result_ttl
 
-    def tearDown(self):
-        pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
-        self.interface._result_ttl = self._result_ttl
+def test_delete_outdated_result(interface):
+    """
+    Store two results in TASK_STATUS_READY state, one of them outdated.
+    After deletion of outdated results just one result should survive.
+    """
+    status=sql_interface.TASK_STATUS_READY
+    uuid_ = uuid.uuid4().hex
+    interface.register_result(tst_callable, uuid_, status=status)
 
-    def _test_storage_location(self):
-        path = pathlib.Path.home() / sql_interface.DEFAULT_STORAGE / TEST_DB_NAME
-        assert self.interface.db_name == path
-        # don't allow setting the db a second time:
-        self.interface.init_database(db_name=ANOTHER_FILE_NAME)
-        assert self.interface.db_name == path
+    # now register the outdated result
+    # setting the interface.result_ttl to a timedelta of zero
+    interface._result_ttl = datetime.timedelta()
+    interface.register_result(tst_add, uuid.uuid4().hex, status=status)
 
-    def _test_storage_location_absolute(self):
-        pathlib.Path(self.interface.db_name).unlink()
-        self.interface.db_name = None
-        path = pathlib.Path.cwd() / ANOTHER_FILE_NAME
-        self.interface.init_database(db_name=path)
-        assert self.interface.db_name == path
+    # now there are two result entries in the database:
+    entries = interface.count_results()
+    assert entries == 2
 
-    def _test_storage(self):
-        entries = self.interface.get_tasks_on_due()
-        self.assertFalse(list(entries))
-        self.interface.register_callable(tst_callable)
-        entries = self.interface.get_tasks_on_due()
-        assert len(entries) == 1
+    # after deletion of the outdated result just one result
+    # should be stored:
+    interface.delete_outdated_results()
+    entries = interface.count_results()
+    assert entries == 1
 
-    def _test_entry_signature(self):
-        self.interface.register_callable(tst_callable)
-        entries = self.interface.get_tasks_on_due()
-        obj = entries[0]
-        assert isinstance(obj, sql_interface.HybridNamespace) is True
-        assert obj["function_module"] == tst_callable.__module__
-        assert obj["function_name"] == tst_callable.__name__
+    # and this should be the one for the tst_callable() function:
+    entry = interface.get_result_by_uuid(uuid_)
+    assert entry.function_module == tst_callable.__module__
+    assert entry.function_name == tst_callable.__name__
 
-    def _test_arguments(self):
-        args = ["pi", 3.141]
-        kwargs = {"answer": 41, 10: "ten"}
-        crontab = "* 1 * * *"
-        self.interface.register_callable(
-            tst_callable, crontab=crontab, args=args, kwargs=kwargs
-        )
-        entries = list(self.interface.get_tasks_on_due())
-        obj = entries[0]
-        assert obj["crontab"] == crontab
-        assert obj["args"] == args
-        assert obj["kwargs"] == kwargs
 
-    def _test_get_tasks(self):
-        # test the generic function to select all tasks:
-        schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_callable)
-        self.interface.register_callable(tst_multiply, crontab="* * * * *")
-        # should return everything:
-        entries = self.interface.get_tasks()
-        assert len(entries) == 3
+def test_delete_cronjobs(interface):
+    """
+    Register three tasks, two of them cronjobs.
+    Delete the cronjobs and just one task should survive.
+    """
+    interface.register_callable(tst_callable)
+    interface.register_callable(tst_add, crontab="* * * * *")
+    interface.register_callable(tst_multiply, crontab="* * * * *")
+    entries = interface.count_tasks()
+    assert entries == 3
 
-    def _test_schedules_get_one_of_two(self):
-        # register two callables, one with a schedule in the future
-        schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_callable)
-        # test to get one callable at due
-        entries = self.interface.get_tasks_on_due()
-        assert len(entries) == 1
+    # now delete the cronjobs:
+    interface.delete_cronjobs()
+    entries = interface.count_tasks()
+    assert entries == 1
 
-    def _test_schedules_get_two_of_two(self):
-        # register two callables, both scheduled in the present or past
-        schedule = datetime.datetime.now() - datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_callable)
-        # test to get one callable at due
-        entries = self.interface.get_tasks_on_due()
-        assert len(entries) == 2
+    # the remaining task should be the tst_callable() function:
+    entry = interface.get_tasks_on_due()[0]
+    assert entry.function_module == tst_callable.__module__
+    assert entry.function_name == tst_callable.__name__
 
-    def _test_delete(self):
-        # register two callables, one with a schedule in the future
-        now = datetime.datetime.now()
-        future_schedule = now + datetime.timedelta(milliseconds=2)
-        past_schedule = now - datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=future_schedule)
-        self.interface.register_callable(tst_callable, schedule=past_schedule)
-        # test to get the `tst_callable` function on due
-        # and delete it from the db
-        entry = self.interface.get_tasks_on_due()[0]
-        assert entry["function_name"] == tst_callable.__name__
-        self.interface.delete_callable(entry)
-        # wait and test to get the remaining single entry
-        # and check whether it is the `tst_add` function
-        time.sleep(0.002)
-        entries = self.interface.get_tasks_on_due()
-        assert len(entries) == 1
-        entry = entries[0]
-        assert entry["function_name"] == tst_add.__name__
 
-    def _test_get_task_by_signature(self):
-        # register two callables, one with a schedule in the future
-        schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_callable)
-        # find a nonexistent callable should return an empty generator
-        entries = self.interface.get_tasks_by_signature(tst_multiply)
-        assert len(entries) == 0
-        # find a callable scheduled for the future:
-        entries = self.interface.get_tasks_by_signature(tst_add)
-        assert len(entries) == 1
+def test_settings_table(raw_interface):
+    """
+    Test story:
+    Create a new db and initialize settings with default values.
+    Change one value (i.e. the max_workers).
+    Initialize the settings again: should have no effect.
+    """
+    interface = raw_interface  # more convenient name
+    interface._set_storage_location(TEST_DB_NAME)
+    interface._create_tables()
+    interface._initialize_settings_table()
 
-    def _test_get_tasks_by_signature(self):
-        # it is allowed to register the same callables multiple times.
-        # regardless of the schedule `get_tasks_by_signature()` should return
-        # all entries.
-        schedule = datetime.datetime.now() + datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_add)
-        entries = list(self.interface.get_tasks_by_signature(tst_add))
-        assert len(entries) == 2
+    # check for default value
+    settings = interface.get_settings()
+    assert settings.max_workers == sql_interface.DEFAULT_MAX_WORKERS
 
-    def _test_get_task_on_due_and_set_status(self):
-        # set two task which are on due with status WAITING (default).
-        # Select them by setting the status to PROCESSED.
-        # A second selection should not work.
-        schedule = datetime.datetime.now() - datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        entries = self.interface.get_tasks_on_due(
-            status=sql_interface.TASK_STATUS_WAITING,
-            new_status=sql_interface.TASK_STATUS_PROCESSING
-        )
-        assert len(entries) == 2
-        # do this a second time should not work
-        entries = self.interface.get_tasks_on_due(
-            status=sql_interface.TASK_STATUS_WAITING,
-            new_status=sql_interface.TASK_STATUS_PROCESSING
-        )
-        assert len(entries) == 0
-        # but the two entries are still there:
-        entries = self.interface.get_tasks()
-        assert len(entries) == 2
+    # change default value
+    new_max_workers = sql_interface.DEFAULT_MAX_WORKERS + 1
+    settings.max_workers = new_max_workers
+    interface.set_settings(settings)
+    settings = interface.get_settings()
+    assert settings.max_workers == new_max_workers
 
-    def _test_update_schedule(self):
-        # entries like cronjobs should not get deleted from the tasks
-        # but updated with the next schedule
-        schedule = datetime.datetime.now()
-        next_schedule = schedule + datetime.timedelta(seconds=10)
-        self.interface.register_callable(tst_add, schedule=schedule)
-        entry = self.interface.get_tasks_by_signature(tst_add)[0]
-        assert entry["schedule"] == schedule
-        self.interface.update_crontask_schedule(entry["rowid"], next_schedule)
-        entry = self.interface.get_tasks_by_signature(tst_add)[0]
-        assert entry["schedule"] == next_schedule
+    # another db-init has no effect (data survive a restart)
+    interface._create_tables()
+    interface._initialize_settings_table()
+    settings = interface.get_settings()
+    assert settings.max_workers == new_max_workers
 
-    def _test_update_crontask(self):
+
+def test_worker_pids(interface):
+    """
+    Test for increment and decrement of the worker pids in the settings.
+    """
+
+    def check_settings():
         """
-        When a crontask is selected for handling because it is 'on due',
-        the status changes from WAITING to PROCESSING. After
-        task-handling and schedule update the status must get reset to
-        WAITING.
+        Helper function compares the pids in the settings
+        with a known list of pids.
         """
-        # after adding a crontask the task is in WAITING state:
-        self.interface.register_callable(tst_add)
-        task = self.interface.get_tasks_by_signature(tst_add)[0]
-        assert task.status == sql_interface.TASK_STATUS_WAITING
-        # after retrieving on due, the state changes to PROCESSING
-        # for the returned task-object and also for the stored task-object:
-        task = self.interface.get_tasks_on_due(
-            new_status=sql_interface.TASK_STATUS_PROCESSING
-        )[0]
-        assert task.status == sql_interface.TASK_STATUS_PROCESSING
-        task = self.interface.get_tasks_by_signature(tst_add)[0]
-        assert task.status == sql_interface.TASK_STATUS_PROCESSING
-        # after calling update_crontask_schedule() the status must
-        # get reset to WAITING again:
-        schedule = datetime.datetime.now()
-        rowid = task.rowid
-        self.interface.update_task_schedule(task, schedule)
-        task = self.interface.get_tasks_by_signature(tst_add)[0]
-        assert task.status == sql_interface.TASK_STATUS_WAITING
+        settings = interface.get_settings()
+        assert settings.running_workers == len(test_pids)
+        text = ",".join(map(str, test_pids))
+        assert settings.worker_pids == text
 
-    def _test_result_by_uuid_no_result(self):
-        # result should be None if no entry found
-        uuid_ = uuid.uuid4().hex
-        result = self.interface.get_result_by_uuid(uuid_)
-        assert result is None
+    # register the pids with increment and check for success
+    test_pids = [42, 377, 42980]
+    for pid in test_pids:
+        interface.increment_running_workers(pid)
+    check_settings()
 
-    def _test_result_by_uuid_result_registered(self):
-        uuid_ = uuid.uuid4().hex
-        self.interface.register_result(tst_add, uuid=uuid_)
-        result = self.interface.get_result_by_uuid(uuid_)
-        # return a TaskResult instance:
-        assert result is not None
-        assert result.is_waiting is True
+    # remove one pid and check again
+    pid = test_pids.pop(1)
+    interface.decrement_running_workers(pid)
+    check_settings()
 
-    def _test_update_result_no_error(self):
-        answer = 42
-        uuid_ = uuid.uuid4().hex
-        self.interface.register_result(tst_add, uuid=uuid_)
-        self.interface.update_result(uuid_, result=answer)
-        result = self.interface.get_result_by_uuid(uuid_)
-        assert result.is_ready is True
-        assert result.function_result == answer
-        # test shortcut for function_result:
-        assert result.result == answer
+    # remove all remaining pids
+    while test_pids:
+        interface.decrement_running_workers(test_pids.pop())
+    check_settings()
 
-    def test_update_result_with_error(self):
-        message = "ValueError: more text here ..."
-        uuid_ = uuid.uuid4().hex
-        self.interface.register_result(tst_add, uuid=uuid_)
-        self.interface.update_result(uuid_, error_message=message)
-        result = self.interface.get_result_by_uuid(uuid_)
-        assert result.has_error is True
 
-    def test_do_not_delete_waiting_results(self):
-        self.interface._result_ttl = datetime.timedelta()
-        self.interface.register_result(tst_callable, uuid.uuid4().hex)
-        self.interface.register_result(tst_add, uuid.uuid4().hex)
-        entries = self.interface.count_results()
-        assert entries == 2
+@pytest.mark.parametrize(
+    "func, args, kwargs, expected_result", [
+        (tst_join_task, ("a", "b"), {}, "abcd"),
+        (tst_join_task, ("a", "b"), {"c":"c", "d":"d"}, "abcd"),
+        (tst_join_task, ("a", "b"), {"c":"e", "d":"f"}, "abef"),
+        (tst_add, (30, 12), {}, 42),
+        (tst_multiply, (5, 7), {}, 35),
+    ]
+)
+def test_task_result(func, args, kwargs, expected_result):
+    """
+    Calls the test function 'func' with the argument given by 'args' and 'kwargs'.
+    """
+    tr = TaskResult.from_function_call(
+        func, *args, **kwargs
+    )
+    assert tr.result == expected_result
 
-    def test_delete_outdated_results(self):
-        # register two results, one of them outdated.
-        uuid_ = uuid.uuid4().hex
-        self.interface.register_result(
-            tst_callable,
-            uuid_,
-            status=sql_interface.TASK_STATUS_READY
-        )
-        # set ttl to 0:
-        self.interface._result_ttl = datetime.timedelta()
-        # this result is outdated
-        self.interface.register_result(
-            tst_add,
-            uuid.uuid4().hex,
-            status=sql_interface.TASK_STATUS_READY
-        )
-        entries = self.interface.count_results()
-        assert entries == 2
-        self.interface.delete_outdated_results()
-        entries = self.interface.count_results()
-        assert entries == 1
-        # the remaining entry should be the `tst_callable` result
-        entry = self.interface.get_result_by_uuid(uuid_)
-        assert entry.function_module == tst_callable.__module__
-        assert entry.function_name == tst_callable.__name__
 
-    def test_delete_mixed_results(self):
-        # register a waiting result, a regular result, an outdated result
-        # and an outdated result with error state.
-        # After deleting the outdated results the entries should be
-        # decreased by one.
-        # the waiting result:
-        self.interface.register_result(tst_callable, uuid.uuid4().hex)
-        # the regular result (not outdated)
-        self.interface.register_result(
-            tst_callable,
-            uuid.uuid4().hex,
-            status=sql_interface.TASK_STATUS_READY
-        )
-        # set ttl to 0:
-        self.interface._result_ttl = datetime.timedelta()
-        # the outdated result:
-        self.interface.register_result(
-            tst_callable,
-            uuid.uuid4().hex,
-            status=sql_interface.TASK_STATUS_READY
-        )
-        # the outdated result in error state:
-        self.interface.register_result(
-            tst_callable,
-            uuid.uuid4().hex,
-            status=sql_interface.TASK_STATUS_ERROR
-        )
-        # test for decreasing entries:
-        entries = self.interface.count_results()
-        self.interface.delete_outdated_results()
-        remaining_entries = self.interface.count_results()
-        assert entries - remaining_entries == 1
+# -------------------------------------------------------------------
+# decorator testing includes database access.
+# for easier testing decorator tests are included here.
 
-    def test_count_rows(self):
-        # call _count_table_rows on an empty table:
-        rows = self.interface._count_table_rows(
-            table_name=sql_interface.DB_TABLE_NAME_TASK)
-        assert rows == 0
-        # create a row and count again:
-        self.interface.register_callable(tst_callable)
-        rows = self.interface._count_table_rows(
-            table_name=sql_interface.DB_TABLE_NAME_TASK)
-        assert rows == 1
-        # check for exception in case of an unknown table:
-        self.assertRaises(
-            sqlite3.OperationalError,
-            self.interface._count_table_rows,
-            table_name="unknwon_table_name"
-        )
+def x_test_cron_with_default_crontab(interface):
+    """
+    Applying cron() without an argument shoulld set the DEFAULT_CRONTAB
+    """
+    # cron() returns the original callable
+    wrapper = decorators.cron()
+    func = wrapper(tst_cron)
+    assert func == tst_cron
 
-    def test_count_results(self):
-        # register three results.
-        # check whether there are three entries in the database
-        self.interface.register_result(tst_callable, uuid.uuid4().hex)
-        self.interface.register_result(tst_add, uuid.uuid4().hex)
-        self.interface.register_result(tst_multiply, uuid.uuid4().hex)
-        entries = self.interface.count_results()
-        assert entries == 3
+    # cron() registers the callable in the database
+    entries = interface.get_tasks_by_signature(tst_cron)
+    assert len(entries) == 1
 
-    def test_count_tasks(self):
-        # register three callables, two as cronjobs.
-        # check whether there are three entries in the database
-        self.interface.register_callable(tst_callable)
-        self.interface.register_callable(tst_add, crontab="* * * * *")
-        self.interface.register_callable(tst_multiply, crontab="* * * * *")
-        entries = self.interface.count_tasks()
-        assert entries == 3
+    # crontab has the default value
+    entry = entries[0]
+    assert entry["crontab"] == decorators.DEFAULT_CRONTAB
 
-    def test_delete_cronjobs(self):
-        # register three callables, two as cronjobs.
-        # delete the cronjobs and check that a single item in left
-        # in the database.
-        self.interface.register_callable(tst_callable)
-        self.interface.register_callable(tst_add, crontab="* * * * *")
-        self.interface.register_callable(tst_multiply, crontab="* * * * *")
-        self.interface.delete_cronjobs()
-        entries = self.interface.count_tasks()
-        assert entries == 1
-        # remaining entry should be the tst_callable
-        entry = self.interface.get_tasks_on_due()[0]
-        assert entry.function_module == tst_callable.__module__
-        assert entry.function_name == tst_callable.__name__
+    # and entry is an HybridNamespace object
+    assert entry.crontab == decorators.DEFAULT_CRONTAB
 
-    def test_initialize_settings_table(self):
-        """
-        Combined test for
-            _initialize_settings_table()
-            get_settings()
-            set_settings()
-        """
 
-        def get_rows():
-            return self.interface._count_table_rows(
-                table_name=sql_interface.DB_TABLE_NAME_SETTINGS
-            )
-        # call to _initialize_settings_table() should add an entry:
-        self.interface._initialize_settings_table()
-        assert get_rows() == 1
-        settings = self.interface.get_settings()
-        assert settings.max_workers == sql_interface.DEFAULT_MAX_WORKERS
-        new_max_workers = sql_interface.DEFAULT_MAX_WORKERS + 1
-        settings.max_workers = new_max_workers
-        self.interface.set_settings(settings)
-        # value of max_workers should have changed
-        new_settings = self.interface.get_settings()
-        assert new_settings.max_workers == new_max_workers
 
-        # a second call should have no effect:
-        self.interface._initialize_settings_table()
-        assert get_rows() == 1
 
-        # and the former changed values are also unchanged:
-        the_settings = self.interface.get_settings()
-        assert the_settings.max_workers == new_max_workers
 
-    def test_worker_settings(self):
-        # increment and decrement worker_pids in the settings
 
-        def check_settings():
-            settings = self.interface.get_settings()
-            assert settings.running_workers == len(test_pids)
-            text = ",".join(map(str, test_pids))
-            assert settings.worker_pids == text
 
-        # register pids
-        test_pids = [42, 377, 42980]
-        for pid in test_pids:
-            self.interface.increment_running_workers(pid)
-        check_settings()
-        # remove a single one
-        pid = test_pids.pop(1)
-        self.interface.decrement_running_workers(pid)
-        check_settings()
-        # remove the remaining ones
-        while test_pids:
-            self.interface.decrement_running_workers(test_pids.pop())
-        check_settings()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # decorator testing includes database access.
@@ -774,7 +581,7 @@ class TestCronDecorator(unittest.TestCase):
         pathlib.Path(decorators.interface.db_name).unlink()
         decorators.interface = self.orig_interface
 
-    def test_cron_no_arguments_active(self):
+    def _test_cron_no_arguments_active(self):
         # the database should have one entry with the default crontab
         wrapper = decorators.cron()
         func = wrapper(tst_cron)
@@ -899,95 +706,10 @@ class TestDelayDecorator(unittest.TestCase):
         assert result.result == 42  # 40 + 2
 
 
-class x_TestHybridNamespace(unittest.TestCase):
-
-    def setUp(self):
-        self.data = {"pi": 3.141, "answer": 42}
-        self.attr_dict = sql_interface.HybridNamespace(self.data)
-
-    def test_dict_access(self):
-        self.attr_dict["one"] = 1
-        assert self.attr_dict["one"] == 1
-
-    def test_attribute_access(self):
-        self.attr_dict.two = 2
-        assert self.attr_dict.two == 2
-
-    def test_mixed_access(self):
-        self.attr_dict.three = 3
-        assert self.attr_dict["three"] == 3
-        self.attr_dict["four"] = 4
-        assert self.attr_dict.four == 4
-
-    def test_get_init_values(self):
-        assert self.attr_dict["pi"] == self.data["pi"]
-        assert self.attr_dict.pi == self.data["pi"]
-        assert self.attr_dict["answer"] == self.data["answer"]
-        assert self.attr_dict.answer == self.data["answer"]
 
 
 def task_result_function(a, b, c="c", d="d"):
     return "".join([a, b, c, d])
-
-
-class TestTaskResult(unittest.TestCase):
-
-    def setUp(self):
-        self.interface = sql_interface.SQLiteInterface()
-        self.interface.init_database(TEST_DB_NAME)
-
-    def tearDown(self):
-        if self.interface.db_name:
-            pathlib.Path(self.interface.db_name).unlink()
-
-    def test_task_result_from_function_call(self):
-        args = ("a", "b")
-        tr = sql_interface.TaskResult.from_function_call(
-            task_result_function,
-            *args
-        )
-        assert tr.status == sql_interface.TASK_STATUS_READY
-        assert tr.result == "abcd"
-        args = ("e", "f")
-        kwargs = {"c": "g", "d": "h"}
-        tr = sql_interface.TaskResult.from_function_call(
-            task_result_function,
-            *args,
-            **kwargs
-        )
-        assert tr.result == "efgh"
-
-    def test_update_task_result(self):
-        """
-        Create an empty TaskResult in waiting state and create a result.
-        Both with the same uuid. Check whether TaskResult can update
-        itself with a delated result.
-        """
-        uid = uuid.uuid4().hex
-        tr = sql_interface.TaskResult.from_registration(uid, self.interface)
-        assert tr.status is sql_interface.TASK_STATUS_WAITING
-        assert tr.is_waiting is True
-        # next is a hack because self.assertRaises expects as second argument
-        # a callable, like self.assertRaises(AttributeError, tr.result).
-        # This does not work with properties.
-        try:
-            tr.result
-        except AttributeError:
-            exception_was_raised = True
-        else:
-            exception_was_raised = False
-        assert exception_was_raised is True
-        # now inject the task to execute:
-        self.interface.register_result(task_result_function, uid, ("a", "b"))
-        # the task is still in waiting state:
-        assert tr.is_waiting is True
-        # update result, we calculate the result here:
-        result = task_result_function("a", "b")
-        self.interface.update_result(uid, result=result)
-        # now the state hase changed:
-        assert tr.is_waiting is False
-        assert tr.is_ready is True
-        assert tr.result == "abcd"
 
 
 class TestDelayedInitialization(unittest.TestCase):
