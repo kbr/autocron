@@ -5,6 +5,7 @@ Version History
 development
 -----------
 
+- tests changed to pytest
 - fixed: reset result_ttl
 - fixed: admin creates database if not existing
 
