@@ -220,8 +220,8 @@ class HybridNamespace(types.SimpleNamespace):
         Set initial values.
         If data is given, it must be a dictionary.
         """
-        if data is not None:
-            self.__dict__.update(data)
+        data = data if data else {}
+        super().__init__(**data)
 
     def __getitem__(self, name):
         return self.__dict__[name]
@@ -489,10 +489,12 @@ class SQLiteInterface:
         Set the database file location. If the path is absolute use the
         path as is. The directory part of the path must exist. If the
         path is relative the database file gets stored in the
-        '~.autocron/' directory. If no home directory is found on the
-        running platform the current working directory is used as a
-        fallback. However in such cases it would be safer to provide an
-        absolute path to the database location.
+        '~.autocron/' directory. If the relative path has subdirectories
+        these directories are ignored and just the filename is used. If
+        no home directory is found on the running platform the current
+        working directory is used as a fallback. However in such cases
+        it would be safer to provide an absolute path to the database
+        location.
         """
         path = pathlib.Path(db_name)
         if not path.is_absolute():
@@ -688,12 +690,13 @@ class SQLiteInterface:
         """
         self._execute(CMD_DELETE_CRON_TASKS)
 
-    def update_crontask_schedule(self, rowid, schedule):
+    def update_task_schedule(self, task, schedule):
         """
-        Update the `schedule` of the table entry with the given `rowid`.
-        As this should be a crontask the status is set to WAITING.
+        Updates the schedule entry of the given task. The task must
+        already be in the database with a defined rowid. Doing a
+        schedule update also set the task-state to WAITING.
         """
-        parameters = schedule, TASK_STATUS_WAITING, rowid
+        parameters = schedule, TASK_STATUS_WAITING, task.rowid
         self._execute(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
     def count_tasks(self):

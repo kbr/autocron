@@ -15,6 +15,19 @@ def test(session):
     session.run("python", "-m", "unittest", *testfiles)
 
 
+# for position arguments run:
+# $ nox -s test-3.11 -- testfile
+@nox.session(python=PYTHON_TEST_VERSIONS)
+def pytest(session):
+    session.install("-e", ".")
+    session.install("pytest")
+    if session.posargs:
+        testfiles = [f"tests/{f}.py" for f in session.posargs]
+    else:
+        testfiles = ["tests"]
+    session.run("pytest", *testfiles)
+
+
 @nox.session
 def lint(session):
     session.install("-e", ".")

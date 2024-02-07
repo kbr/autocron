@@ -96,21 +96,22 @@ def cron(crontab=None,
         crontab = DEFAULT_CRONTAB
 
     def wrapper(func):
-        scheduler = CronScheduler(
-            minutes=minutes,
-            hours=hours,
-            dow=dow,
-            months=months,
-            dom=dom,
-            crontab=crontab
-        )
-        schedule = scheduler.get_next_schedule()
-        interface.register_callable(
-            func,
-            schedule=schedule,
-            crontab=crontab,
-            unique=True  # don't register cron-tasks twice
-        )
+        if interface.accept_registrations:
+            scheduler = CronScheduler(
+                minutes=minutes,
+                hours=hours,
+                dow=dow,
+                months=months,
+                dom=dom,
+                crontab=crontab
+            )
+            schedule = scheduler.get_next_schedule()
+            interface.register_callable(
+                func,
+                schedule=schedule,
+                crontab=crontab,
+                unique=True  # don't register cron-tasks twice
+            )
         return func
 
     return wrapper
