@@ -1,8 +1,3 @@
-"""
-test_schedule.py
-
-Adapted from pytest
-"""
 
 from datetime import datetime as dt
 from types import SimpleNamespace
@@ -14,7 +9,6 @@ from autocron.schedule import (
     get_next_value,
     get_periodic_schedule,
 )
-
 
 
 @pytest.mark.parametrize(
