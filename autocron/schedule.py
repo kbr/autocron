@@ -1,302 +1,40 @@
 """
-schedule.py
+Scheduler for cron-tasks.
 
-for cronjobs: from the last schedule (or now) and a given crontab,
-calculates the next schedule.
+Takes a last schedule datetime-object and a crontab string and calcultes the next time a command should get executed. The crontab format used has five fields and a resolution of one minute (https://en.wikipedia.org/wiki/Cron):
+
+# ┌───────────── minute (0–59)
+# │ ┌───────────── hour (0–23)
+# │ │ ┌───────────── day of the month (1–31)
+# │ │ │ ┌───────────── month (1–12)
+# │ │ │ │ ┌───────────── day of the week (0–6) (Sunday to Saturday;
+# │ │ │ │ │                                   7 is also Sunday on some systems)
+# │ │ │ │ │
+# │ │ │ │ │
+# * * * * * <command to execute>
+
+The fields are separated by at least a single whitespace. The fields
+themselfes don't have whitespaces.
+
+Every field can have the values: "*", "*/n" or "x,y,z"
+
+
 """
-# pylint: disable=too-many-arguments
 
 import calendar
-import datetime
-from datetime import timedelta
 import re
+import types
 
 
-class Sequencer:
-    """
-    Data-descriptor for runtime type-checking and -conversion.
-    """
-    def __init__(self):
-        self.name = None
-        self.storage = None
+CRONTAB_PARTS = ["minutes", "hours", "days", "months", "days_of_week"]
+CRONTAB_MAX_VALUES = [59, 23, 31, 12, 6]
+CRONTAB_MIN_VALUES = [0, 0, 1, 1, 0]
 
-    def __set_name__(self, cls, name):
-        self.name = name
-        self.storage = f"_{name}"
+MINUTES_PER_HOUR = 60
+HOURS_PER_DAY = 24
 
-    def __get__(self, obj, objtype=None):
-        return getattr(obj, self.storage)
-
-    def __set__(self, obj, value):
-        if value is None:
-            pass
-        elif isinstance(value, int):
-            value = [value]
-        elif not isinstance(value, (tuple, list)):
-            msg = f"Argument '{self.name}' must be of type int, tuple or list, "\
-                  f"got {type(value)} instead."
-            raise TypeError(msg)
-        setattr(obj, self.storage, value)
-
-
-class CronScheduler:
-    """
-    Schedules a cron task.
-
-    Usage:
-
-    cs = CronScheduler()
-    next_schedule = cs.get_next_schedule()
-    """
-
-    minutes = Sequencer()
-    hours = Sequencer()
-    dow = Sequencer()
-    month = Sequencer()
-    dom = Sequencer()
-
-    def __init__(self, last_schedule=None, minutes=None, hours=None,
-                 dow=None, months=None, dom=None, crontab=None):
-        """
-        Inits the scheduler with values according the crontab-format.
-
-        All arguments are optional. If no arguments are given the task
-        is scheduled from now on every minute.
-
-        last_schedule: last time the according tasks has run
-        minutes: list of integers when a task should run in an hour [0-59]
-        hours: list of integers when a task should run during a day [0-23]
-        dow: list of integers for the days of week when a task should
-        run [0-6] (0 for monday up to 6 for sunday).
-        month: list of integers for the months a task should run [1-12]
-        dom: list of intergs for the day in a month a task should run [1-31]
-        """
-        self.last_schedule = last_schedule or datetime.datetime.now()
-        self.minutes = minutes
-        self.hours = hours
-        self.dow = dow
-        self.months = months
-        self.dom = dom
-        self.parse_crontab(crontab)
-
-    def parse_crontab(self, crontab):
-        """
-        Parses a simple crontab-string with five patterns:
-
-        Minute [0,59]
-        Hour [0,23]
-        Day of the month [1,31]
-        Month of the year [1,12]
-        Day of the week ([0,6] with 0=Monday)
-
-        Each of these patterns can be either an asterisk (meaning all
-        valid values), an element, or a list of elements separated by
-        commas. An element shall be either a number or two numbers
-        separated by a hyphen (meaning an inclusive range).
-
-        A day-range for a month like 1-4,12,20-25 is also ok. But keep
-        in mind that no spaces are allowed as spaces are the separators
-        between the patterns.
-
-        Some examples:
-
-        * * * * *               runs every minute
-        5 * * * *               runs every five minutes
-        30 7 0 4,7 10-15        runs at 7:30 on mondays and also from the
-                                10th to 15th of a month, but only in april
-                                and july
-
-        May raise errors if the crontab could not be parsed. The
-        crontab-content is *not* checked for correctness).
-        """
-        def crontab_values():
-            for item in crontab.split():
-                item = item.strip()
-                if item == '*':
-                    yield None
-                    continue
-                inner = []
-                for element in item.split(','):
-                    match_object = re.match(r'(\d+)-(\d+)', element)
-                    if match_object:
-                        inner.extend(list(range(
-                            int(match_object.group(1)),
-                            int(match_object.group(2))+1
-                        )))
-                    else:
-                        inner.append(int(element))
-                yield inner
-
-        if crontab:
-            crontab_value = crontab_values()
-            # some magic: dynamic setting of instance attributes
-            for name in ("minutes", "hours", "dow", "months", "dom"):
-                setattr(self, name, next(crontab_value))
-
-    def get_next_schedule(self, last_schedule=None):
-        """
-        Returns the next schedule based on the current date as a
-        datetime-object.
-        """
-        last_schedule = last_schedule or self.last_schedule
-        next_schedule = self.find_next_schedule(last_schedule)
-        if not self.month_allowed(next_schedule):
-            schedule = self.set_allowed_month(next_schedule)
-            return self.get_next_schedule(schedule)
-        return next_schedule
-
-    def set_allowed_month(self, schedule):
-        """
-        Modifies the schedule to the first day of the next allowed
-        month and returns this new schedule.
-        """
-        month = get_next_value(schedule.month, self.months)
-        if month > schedule.month:
-            year = schedule.year
-        else:
-            year = schedule.year + 1
-        return datetime.datetime(year, month, 1)
-
-    def month_allowed(self, schedule):
-        """
-        Returns a boolean whether the scheduled month is allowed by the
-        crontab data.
-        """
-        if not self.months:
-            return True
-        return schedule.month in self.months
-
-    def day_allowed(self, schedule):
-        """
-        Returns a boolean whether the scheduled day is allowed by the
-        crontab data.
-        """
-        if not self.dom and not self.dow:
-            # every day is allowed
-            return True
-        if self.dom and schedule.day in self.dom:
-            # day of month is allowed
-            return True
-        weekday = calendar.weekday(schedule.year, schedule.month, schedule.day)
-        if self.dow and weekday in self.dow:
-            # weekday is allowed
-            return True
-        return False
-
-    def hour_allowed(self, schedule):
-        """
-        Returns a boolean whether the scheduled hour is allowed by the
-        crontab data.
-        """
-        if not self.hours:
-            return True
-        return schedule.hour in self.hours
-
-    def find_next_schedule(self, last_schedule):
-        """
-        Finds the next allowed day and time according to the crontab
-        data. It has to be assumed that last_schedule may not be a valid
-        schedule (may be initialized with now()).
-        Returns a datetime-object.
-        """
-        # short cut
-        ls = last_schedule  # pylint: disable=invalid-name
-        next_minute = self.get_next_minute(ls)
-        if next_minute > ls.minute:
-            # same day, same hour
-            delta = next_minute - ls.minute
-            if self.hour_allowed(ls):
-                return ls + timedelta(minutes=delta)
-        next_hour = self.get_next_hour(ls)
-        if next_hour > ls.hour:
-            # same day
-            if self.day_allowed(ls):
-                delta_hours = next_hour - ls.hour
-                delta_minutes = next_minute - ls.minute
-                return ls + timedelta(hours=delta_hours, minutes=delta_minutes)
-        if not self.dow and not self.dom:
-            # next day
-            schedule = self.get_next_day(ls)
-        elif self.dom and not self.dow:
-            # find next allowed day of month
-            schedule = self.get_next_dom(ls)
-        elif not self.dom and self.dow:
-            # find next allowed weekday
-            schedule = self.get_next_dow(ls)
-        elif self.dom and self.dow:
-            # find first next allowed day of month
-            schedule_dom = self.get_next_dom(ls)
-            schedule_dow = self.get_next_dow(ls)
-            schedule = min(schedule_dom, schedule_dow)
-        return schedule + timedelta(
-            hours=next_hour-ls.hour,
-            minutes=next_minute-ls.minute)
-
-    def get_next_minute(self, last_schedule):
-        """
-        Returns the next minute a task should run according to
-        last_schedule (a datetime object) and the content of
-        self.minutes.
-        """
-        if self.minutes:
-            minute = get_next_value(last_schedule.minute, self.minutes)
-        else:
-            minute = last_schedule.minute + 1
-            if minute > 59:
-                minute = 0
-        return minute
-
-    def get_next_hour(self, last_schedule):
-        """
-        Returns the next hour a task should run according to
-        last_schedule ( a datetime object) and the content of
-        self.hours.
-        """
-        if self.hours:
-            hour = get_next_value(last_schedule.hour, self.hours)
-        else:
-            hour = last_schedule.hour + 1
-            if hour > 23:
-                hour = 0
-        return hour
-
-    @staticmethod
-    def get_next_day(last_schedule):
-        """
-        Increments the day according to last_schedule (a
-        datetime-object) and returns the new date as datetime-object.
-        """
-        return last_schedule + datetime.timedelta(days=1)
-
-    def get_next_dom(self, last_schedule):
-        """
-        Calculates the next allowed day and returns the result as a
-        datetime-object.
-        """
-        # method gets not called if self.dom is None or empty
-        next_day = get_next_value(last_schedule.day, self.dom)
-        day = last_schedule.day
-        if next_day > day:
-            delta = next_day - day
-        else:
-            _, max_days = calendar.monthrange(
-                last_schedule.year, last_schedule.month)
-            delta = max_days - day + next_day
-        return last_schedule + datetime.timedelta(days=delta)
-
-    def get_next_dow(self, last_schedule):
-        """
-        Calculates the next allowed weekday and returns the result as a
-        datetime-object.
-        """
-        weekday = calendar.weekday(
-            last_schedule.year, last_schedule.month, last_schedule.day)
-        next_weekday = get_next_value(weekday, self.dow)
-        if next_weekday > weekday:
-            delta = next_weekday - weekday
-        else:
-            delta = 7 - weekday + next_weekday
-        return last_schedule + datetime.timedelta(days=delta)
+RE_REPEAT = re.compile(r"\*/(\d+)")
+RE_SEQUENCE = re.compile(r"(\d+)-(\d+)")
 
 
 def get_next_value(value, values):
@@ -310,25 +48,151 @@ def get_next_value(value, values):
     return values[0]
 
 
-def get_periodic_schedule(task):
+def get_numeric_sequence(pattern, min_value, max_value):
     """
-    Check whether the tasks runs every n minutes or every n hours.
-    Returns a new schedule or None if the next schedule must get
-    calculated differently
+    Converts a pattern to a numeric sequence:
+    * -> [0..max_value] stepwidth 1
+    */n -> [0..max_value] stepwidth n
+    m-n -> [m..n] stepwidth 1
+    m,n -> [m,n]
+    a-b,m,p-q -> [a..b,m,p..q] partial stepwidth 1
     """
-    minutes = None
-    starnum = task.crontab.count("*")
-    if starnum == 5:
-        minutes = 1
-    elif starnum == 4:
-        items = task.crontab.split()
-        try:
-            minutes = int(items[0])
-        except ValueError:
-            try:
-                minutes = int(items[1]) * 60
-            except ValueError:
-                pass
-    if minutes:
-        return task.schedule + datetime.timedelta(minutes=minutes)
-    return None
+    pattern = pattern.strip()
+    if pattern == "*":
+        return list(range(min_value, max_value + 1))
+    if mo := RE_REPEAT.match(pattern):
+        stepwidth = int(mo.group(1))
+        return list(range(min_value, max_value + 1, stepwidth))
+    values = []
+    for element in pattern.split(","):
+        if mo := RE_SEQUENCE.match(element):
+            values.extend(list(range(int(mo.group(1)), int(mo.group(2)) + 1)))
+        else:
+            values.append(int(element))
+    return sorted(set(values))
+
+
+def get_cron_parts(crontab):
+    """
+    Returns a SimpleNamespace object with attribute-names given in
+    CRONTAB_PARTS and values provided by get_numeric_sequence() for the
+    given crontab parts. Example:
+
+    >>> cp = get_cron_parts("* 5 2-4 11 *")
+    >>> cp.hours
+    [5]
+    >>> cp.days
+    [2, 3, 4]
+
+    The other attributes are also lists with the according values.
+    """
+    data = {
+        name: get_numeric_sequence(item, min_value, max_value)
+        for name, item, min_value, max_value in zip(
+            CRONTAB_PARTS,
+            crontab.split(),
+            CRONTAB_MIN_VALUES,
+            CRONTAB_MAX_VALUES
+        )
+    }
+    return types.SimpleNamespace(**data)
+
+
+def get_next_value(value, values):
+    """
+    Returns the next value from values which is larger then value or the
+    first item from the sequence values.
+    """
+    for item in values:
+        if item > value:
+            return item
+    return values[0]
+
+
+def get_next_minute(values, previous_schedule):
+    """
+    Calculates the next minute to execute a task based on the previous
+    schedule and the minute values of the parsed crontab. Return a tuple
+    with a delta_minute and the next_minute. delta minute is the
+    difference between the next_minute and the minute from the
+    previous_schedule.
+    """
+    previous_minute = previous_schedule.minute
+    next_minute = get_next_value(previous_minute, values)
+    delta_minutes = next_minute - previous_minute
+    if next_minute <= previous_minute:
+        delta_minutes += MINUTES_PER_HOUR
+    return delta_minutes, next_minute
+
+
+def get_next_hour(values, previous_schedule, next_minute):
+    """
+    Calculates the next hour to execute a task. If the next_minute is
+    larger than the minute from the previous_schedule then the hour
+    should not change. Otherwise increment the hour. Returns a tuple
+    with delta_hour and the next_hour.
+    """
+    previous_minute = previous_schedule.minute
+    previous_hour = previous_schedule.hour
+    if next_minute > previous_minute and previous_hour in values:
+        delta_hours = 0
+        next_hour = previous_hour
+    else:
+        next_hour = get_next_value(previous_hour, values)
+        delta_hours = next_hour - previous_hour
+        if next_hour <= previous_hour:
+            delta_hours += HOURS_PER_DAY
+    return delta_hours, next_hour
+
+
+def get_next_day(values, previous_schedule, next_hour):
+    """
+    Calculates the next day to execute a task. If the next_hour is
+    larger than the hour from the previous_schedule the the day should
+    not change. Otherwise increment the day. Furthermore check, whether
+    the incremented day is a valid day for the month of the previous
+    schedule. Returns a tuple with the delta_days and the next_day.
+    """
+    previous_hour = previous_schedule.hour
+    previous_day = previous_schedule.day
+    if next_hour > previous_hour and previous_day in values:
+        delta_days = 0
+        next_day = previous_day
+    else:
+        _, days_per_month = calendar.monthrange(
+            previous_schedule.year, previous_schedule.month
+        )
+        next_day = get_next_value(previous_day, values)
+        delta_days = next_day - previous_day
+        if next_day <= previous_day:
+            delta_days += days_per_month
+        if next_day > days_per_month:
+            next_day -= days_per_month
+    return delta_days, next_day
+
+
+def get_next_month(values, previous_schedule, next_day):
+    """
+    Calculates the next month to execute the task. If the next day is larger than the day from the previous_schedule the month should not change. Otherwise increment the month. Returns a tuple with
+    """
+
+
+def get_next_schedule(crontab, previous_schedule):
+    """
+    Takes a crontab string and the datetime-object of the previous
+    schedule. Calculates the next schedule and returns this also as a
+    datetime-object.
+    """
+    cron_parts = get_cron_parts(crontab)
+    delta_minutes, next_minute = get_next_minute(
+        cron_parts.minutes,
+        previous_schedule
+    )
+    delta_hours, next_hour = get_next_hour(
+        cron_parts.hours,
+        previous_schedule,
+        next_minute
+    )
+
+class CronScheduler():
+    pass

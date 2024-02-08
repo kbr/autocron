@@ -1,220 +1,132 @@
 
 from datetime import datetime as dt
-from types import SimpleNamespace
 
 import pytest
 
 from autocron.schedule import (
-    CronScheduler,
+    get_cron_parts,
+    get_next_day,
+    get_next_hour,
+    get_next_minute,
     get_next_value,
-    get_periodic_schedule,
+    get_numeric_sequence,
 )
 
 
-@pytest.mark.parametrize(
-    'crontab, minutes, hours, dow, months, dom', [
-        ('* * * * *', None, None, None, None, None),
-        ('5 * * * *', [5], None, None, None, None),
-        ('5,7 * * * *', [5, 7], None, None, None, None),
-        ('5-7 * * * *', [5, 6, 7], None, None, None, None),
-        ('5-8,12 * * * *', [5, 6, 7, 8, 12], None, None, None, None),
-        ('1,5-8,12,14,20-22 * * * *', [1, 5, 6, 7, 8, 12, 14, 20, 21, 22], None, None, None, None),
-        ('30 7 * * *', [30], [7], None, None, None),
-        ('30 7-9 * * *', [30], [7, 8, 9], None, None, None),
-        ('30 7 0 * *', [30], [7], [0], None, None),
-        ('30 7 0 4,7 10-15', [30], [7], [0], [4, 7], [10, 11, 12, 13, 14, 15]),
-    ])
-def test_crontab(crontab, minutes, hours, dow, months, dom):
-    cs = CronScheduler(crontab=crontab)
-    assert cs.minutes == minutes
-    assert cs.hours == hours
-    assert cs.dow == dow
-    assert cs.months == months
-    assert cs.dom == dom
+def test_get_cron_parts():
+    """
+    Test the crontab parsing into list of values.
+    """
+    crontab = "2,3-5 * 2-4 */4 */2"
+    cp = get_cron_parts(crontab)
+    assert cp.minutes == [2, 3, 4, 5]
+    assert cp.hours == list(range(24))
+    assert cp.days == [2, 3, 4]
+    assert cp.months == [1, 5, 9]
+    assert cp.days_of_week == [0, 2, 4, 6]
 
 
 @pytest.mark.parametrize(
-    'value, values, result', [
+    'values, previous_schedule, next_hour, expected_result', [
+        ([10, 12], dt(2024, 2, 8, 10, 0), 11, (2, 10)),
+        ([10, 12], dt(2024, 2, 10, 10, 0), 11, (0, 10)),
+        ([10, 12], dt(2024, 2, 10, 10, 0), 5, (2, 12)),
+        ([10, 12], dt(2024, 2, 10, 10, 0), 10, (2, 12)),
+        ([10, 12], dt(2024, 2, 12, 10, 0), 5, (27, 10)),  # leap year
+        ([10, 12], dt(2023, 2, 12, 10, 0), 5, (26, 10)),  # not a leap year
+        ([10, 12], dt(2023, 6, 12, 10, 0), 5, (28, 10)),  # from jun to jul
+        ([10, 12], dt(2023, 7, 12, 10, 0), 5, (29, 10)),  # from jul to aug
+    ]
+)
+def test_get_next_day(values, previous_schedule, next_hour, expected_result):
+    """
+    Test to get the next day from the crontab list depending on the
+    previous schedule and the calculated next hour.
+    """
+    result = get_next_day(values, previous_schedule, next_hour)
+    assert result == expected_result
+
+
+@pytest.mark.parametrize(
+    'values, previous_schedule, next_minute, expected_result', [
+        ([10, 12], dt(2024, 2, 8, 10, 30), 40, (0, 10)),
+        ([10, 12], dt(2024, 2, 8, 10, 40), 20, (2, 12)),
+        ([10, 12], dt(2024, 2, 8, 12, 20), 10, (22, 10)),
+        ([10, 12], dt(2024, 2, 8, 2, 20), 10, (8, 10)),
+        ([10, 12], dt(2024, 2, 8, 2, 20), 30, (8, 10)),
+        ([10, 12], dt(2024, 2, 8, 11, 20), 30, (1, 12)),
+    ]
+)
+def test_get_next_hour(values, previous_schedule, next_minute, expected_result):
+    """
+    Test to get the next hour from the crontab list depending on the
+    previous schedule and the calculated next minute.
+    """
+    result = get_next_hour(values, previous_schedule, next_minute)
+    assert result == expected_result
+
+
+@pytest.mark.parametrize(
+    'values, previous_schedule, expected_result', [
+        ([10, 20, 25], dt(2024, 2, 8, 2, 0), (10, 10)),
+        ([10, 20, 25], dt(2024, 2, 8, 2, 10), (10, 20)),
+        ([10, 20, 25], dt(2024, 2, 8, 2, 20), (5, 25)),
+        ([10, 20, 25], dt(2024, 2, 8, 2, 25), (45, 10)),
+        ([10, 20, 25], dt(2024, 2, 8, 2, 55), (15, 10)),
+    ]
+)
+def test_get_next_minute(values, previous_schedule, expected_result):
+    """
+    Test to get the next minute from the crontab list depending on the
+    previous schedule.
+    """
+    result = get_next_minute(values, previous_schedule)
+    assert result == expected_result
+
+
+@pytest.mark.parametrize(
+    'value, values, expected_result', [
         (2, [5, 10, 15], 5),
         (5, [5, 10, 15], 10),
         (10, [5, 10, 15], 15),
         (15, [5, 10, 15], 5),
+        (20, [5, 10, 15], 5),
         (2, [7], 7),
         (7, [7], 7),
         (9, [7], 7),
     ])
-def test_get_next_value(value, values, result):
-    assert result == get_next_value(value, values)
-
-
-@pytest.mark.parametrize(
-    'crontab, minutes, minute, result', [
-        (None, None, 10, 11),
-        (None, None, 58, 59),
-        (None, None, 59, 0),
-        (None, [10, 30], 2, 10),
-        (None, [10, 30], 10, 30),
-        (None, [10, 30], 30, 10),
-        (None, [10], 30, 10),
-        (None, [10], 10, 10),
-        (None, [10], 1, 10),
-        ('* * * * *', None, 10, 11),
-        ('5 * * * *', None, 10, 5),
-        ('5,15 * * * *', None, 10, 15),
-        ('5,15 * * * *', [12, 20], 10, 15),
-        ('5,15 * * * *', [12, 20], 15, 5),
-    ])
-def test_get_next_minute(crontab, minutes, minute, result):
-    last_schedule = dt(2016, 4, 20, minute=minute)
-    cs = CronScheduler(
-        last_schedule=last_schedule, crontab=crontab, minutes=minutes
-    )
-    assert result == cs.get_next_minute(last_schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, hours, hour, result', [
-        (None, None, 22, 23),
-        (None, None, 23, 0),
-        ('* * * * *', None, 10, 11),
-        ('* 15 * * *', None, 10, 15),
-        ('* 15 * * *', None, 15, 15),
-        ('* 15 * * *', None, 17, 15),
-    ])
-def test_get_next_hour(crontab, hours, hour, result):
-    last_schedule = dt(2016, 4, 20, hour=hour)
-    cs = CronScheduler(
-        last_schedule=last_schedule, crontab=crontab, hours=hours
-    )
-    assert result == cs.get_next_hour(last_schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, last_schedule, result', [
-        ('* * * * 3', dt(2016, 4, 1), dt(2016, 4, 3)),
-        ('* * * * 3', dt(2016, 4, 3), dt(2016, 5, 3)),
-        ('* * * * 3,20', dt(2016, 4, 3), dt(2016, 4, 20)),
-        ('* * * * 3,20', dt(2016, 4, 20), dt(2016, 5, 3)),
-    ])
-def test_get_next_dom(crontab, last_schedule, result):
-    cs = CronScheduler(last_schedule=last_schedule, crontab=crontab)
-    assert result == cs.get_next_dom(last_schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, last_schedule, result', [
-        ('* * 0 * *', dt(2016, 3, 1), dt(2016, 3, 7)),
-        ('* * 0 * *', dt(2016, 3, 7), dt(2016, 3, 14)),
-        ('* * 0 * *', dt(2016, 3, 28), dt(2016, 4, 4)),
-        ('* * 0 * *', dt(2016, 2, 22), dt(2016, 2, 29)),  # leap year
-        ('* * 2,4 * *', dt(2016, 4, 1), dt(2016, 4, 6)),
-        ('* * 2,4 * *', dt(2016, 4, 6), dt(2016, 4, 8)),
-        ('* * 2,4 * *', dt(2016, 4, 8), dt(2016, 4, 13)),
-    ])
-def test_get_next_dow(crontab, last_schedule, result):
-    cs = CronScheduler(last_schedule=last_schedule, crontab=crontab)
-    assert result == cs.get_next_dow(last_schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, schedule, result', [
-        ('* * * * *', dt(2016, 4, 26), True),
-        ('* * * 4 *', dt(2016, 4, 26), True),
-        ('* * * 5 *', dt(2016, 4, 26), False),
-        ('* * * 4,5 *', dt(2016, 4, 26), True),
-        ('* * * 3-5 *', dt(2016, 4, 26), True),
-    ])
-def test_month_allowed(crontab, schedule, result):
-    cs = CronScheduler(crontab=crontab)
-    assert result == cs.month_allowed(schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, schedule, result', [
-        ('* * * * *', dt(2016, 4, 26), True),
-        ('* * 0 * *', dt(2016, 4, 26), False),
-        ('* * 1 * *', dt(2016, 4, 26), True),
-        ('* * * * 24', dt(2016, 4, 26), False),
-        ('* * * * 24-27', dt(2016, 4, 26), True),
-        ('* * 1 * 22', dt(2016, 4, 26), True),
-        ('* * 2 * 22', dt(2016, 4, 26), False),
-        ('* * 2 * 26', dt(2016, 4, 26), True),
-        ('* * 1 * 26', dt(2016, 4, 26), True),
-    ])
-def test_day_allowed(crontab, schedule, result):
-    cs = CronScheduler(crontab=crontab)
-    assert result == cs.day_allowed(schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, schedule, result', [
-        ('* * * 5 *', dt(2016, 4, 26), dt(2016, 5, 1)),
-        ('* * * 4 *', dt(2016, 4, 26), dt(2017, 4, 1)),
-        ('* * * 3-5 *', dt(2016, 2, 26), dt(2016, 3, 1)),
-        ('* * * 3-5 *', dt(2016, 3, 26), dt(2016, 4, 1)),
-        ('* * * 3-5 *', dt(2016, 4, 26), dt(2016, 5, 1)),
-        ('* * * 3-5 *', dt(2016, 5, 26), dt(2017, 3, 1)),
-    ])
-def test_set_allowed_month(crontab, schedule, result):
-    cs = CronScheduler(crontab=crontab)
-    assert result == cs.set_allowed_month(schedule)
-
-
-@pytest.mark.parametrize(
-    'crontab, schedule, result', [
-        ('* * * * *', dt(2016, 4, 26, 8, 58), dt(2016, 4, 26, 8, 59)),
-        ('* * * * *', dt(2016, 4, 26, 8, 59), dt(2016, 4, 26, 9, 0)),
-        ('15,30 * * * *', dt(2016, 4, 26, 8, 59), dt(2016, 4, 26, 9, 15)),
-        ('15,30 * * * *', dt(2016, 4, 26, 9, 15), dt(2016, 4, 26, 9, 30)),
-        ('15,30 * * * *', dt(2016, 4, 26, 9, 30), dt(2016, 4, 26, 10, 15)),
-        ('30 7-8 * * *', dt(2016, 4, 26, 6, 30), dt(2016, 4, 26, 7, 30)),
-        ('30 7-8 * * *', dt(2016, 4, 26, 7, 30), dt(2016, 4, 26, 8, 30)),
-        ('30 7-8 * * *', dt(2016, 4, 26, 8, 30), dt(2016, 4, 27, 7, 30)),
-        ('* 10 * * *', dt(2016, 4, 27, 7, 58), dt(2016, 4, 27, 10, 59)),
-        ('* 10 * * *', dt(2016, 4, 27, 10, 59), dt(2016, 4, 28, 10, 0)),
-        ('30 10 * 7 *', dt(2016, 4, 27, 10, 59), dt(2016, 7, 1, 10, 30)),
-        ('30 10 * 7 *', dt(2016, 7, 1, 10, 30), dt(2016, 7, 2, 10, 30)),
-        ('30 10 * 7 *', dt(2016, 7, 31, 10, 30), dt(2017, 7, 1, 10, 30)),
-        ('30 10 1 * *', dt(2016, 4, 6, 11, 30), dt(2016, 4, 12, 10, 30)),
-        ('30 10 1 * *', dt(2016, 4, 26, 11, 30), dt(2016, 5, 3, 10, 30)),
-        ('0 8 * * 22,23', dt(2016, 4, 26, 11, 30), dt(2016, 5, 22, 8, 0)),
-        ('0 8 * * 22,23', dt(2016, 5, 22, 8, 0), dt(2016, 5, 23, 8, 0)),
-        ('0 8 * * 22,23', dt(2016, 5, 23, 8, 0), dt(2016, 6, 22, 8, 0)),
-        ('0 8 0 * 22,23', dt(2016, 5, 23, 8, 0), dt(2016, 5, 30, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 5, 23, 8, 0), dt(2016, 6, 6, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 6, 6, 8, 0), dt(2016, 6, 13, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 6, 13, 8, 0), dt(2016, 6, 20, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 6, 20, 8, 0), dt(2016, 6, 22, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 6, 23, 8, 0), dt(2016, 6, 27, 8, 0)),
-        ('0 8 0 6 22,23', dt(2016, 6, 27, 8, 0), dt(2017, 6, 5, 8, 0)),
-    ])
-def test_get_next_schedule(crontab, schedule, result):
-    cs = CronScheduler(crontab=crontab, last_schedule=schedule)
-    assert result == cs.get_next_schedule()
-
-
-@pytest.mark.parametrize(
-    'crontab, schedule, next_schedule', [
-        ("* * * * *", dt(2024, 1, 1, 10, 0), dt(2024, 1, 1, 10, 1)),
-        ("1 * * * *", dt(2024, 1, 1, 10, 0), dt(2024, 1, 1, 10, 1)),
-        ("10 * * * *", dt(2024, 1, 1, 10, 0), dt(2024, 1, 1, 10, 10)),
-        ("5,10 * * * *", dt(2024, 1, 1, 10, 0), None),
-        ("* 1 * * *",  dt(2024, 1, 1, 10, 0), dt(2024, 1, 1, 11, 0)),
-        ("* 2 * * *", dt(2024, 1, 1, 10, 0), dt(2024, 1, 1, 12, 0)),
-        ("* * 1 * *", dt(2024, 1, 1, 10, 0), None),
-        ("* * * 1 *", dt(2024, 1, 1, 10, 0), None),
-        ("* * * * 1", dt(2024, 1, 1, 10, 0), None),
-        ("1 * * * 1", dt(2024, 1, 1, 10, 0), None),
-        ("10 * 0 * *", dt(2024, 1, 1, 10, 0), None),
-        ("1 2 * * *", dt(2024, 1, 1, 10, 0), None),
-    ])
-def test_get_periodic_schedule(crontab, schedule, next_schedule):
+def test_get_next_value(value, values, expected_result):
     """
-    Test that calculating a new schedule for task running every
-    minutes or hours do not have a timeshift.
+    Check to get the next element from a sequence of values larger than
+    a given value. If there is no larger value, the first element from
+    the sequence should get returned.
     """
-    task = SimpleNamespace()
-    task.crontab = crontab
-    task.schedule = schedule
-    result = get_periodic_schedule(task)
-    assert result == next_schedule
+    result = get_next_value(value, values)
+    assert result == expected_result
+
+
+@pytest.mark.parametrize(
+    "pattern, min_value, max_value, expected_result", [
+        ("*", 0, 5, list(range(6))),
+        (" *  ", 0, 5, list(range(6))),
+        ("*/2", 0, 6, list(range(0, 7, 2))),
+        ("*/15", 0, 59, list(range(0, 60, 15))),
+        ("12,5,30", 0, 59, [5, 12, 30]),
+        ("10-20", 0, 59, list(range(10, 21))),
+        ("2,4-8,22", 0, 59, [2]+list(range(4, 9))+[22]),
+        ("20-30,8,6,4,10-19",
+            0, 59, list(range(4, 9, 2)) + list(range(10, 31))),
+        ("*", 1, 30, list(range(1, 31))),
+        ("*/2", 0, 10, list(range(0, 11, 2))),
+        ("*/2", 1, 10, list(range(1, 11, 2))),
+    ]
+)
+def test_get_numeric_sequence(pattern, min_value, max_value, expected_result):
+    """
+    Test to convert a pattern like "*", "*/n" etc. to a sequence of
+    numeric values.
+    """
+    result = get_numeric_sequence(pattern, min_value, max_value)
+    assert result == expected_result
+
+
