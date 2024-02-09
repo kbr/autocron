@@ -10,10 +10,7 @@ import signal
 import sys
 import time
 
-from autocron.schedule import (
-    CronScheduler,
-    get_periodic_schedule,
-)
+from autocron.schedule import CronScheduler
 from autocron import sql_interface
 
 
@@ -125,10 +122,8 @@ class Worker:
         if task.crontab:
             # if the task has a crontab calculate new schedule
             # and update the task-entry
-            schedule = get_periodic_schedule(task)
-            if schedule is None:
-                scheduler = CronScheduler(crontab=task.crontab)
-                schedule = scheduler.get_next_schedule()
+            scheduler = CronScheduler(crontab=task.crontab)
+            schedule = scheduler.get_next_schedule()
             self.interface.update_task_schedule(task, schedule)
         else:
             # not a cronjob: delete the task from the db
