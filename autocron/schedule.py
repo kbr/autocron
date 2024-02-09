@@ -16,9 +16,9 @@ Takes a last schedule datetime-object and a crontab string and calcultes the nex
 The fields are separated by at least a single whitespace. The fields
 themselfes don't have whitespaces.
 
-Every field can have the values: "*", "*/n" or "x,y,z"
-
-
+Every field can have the values: "*", "*/n" or "x,y,z".
+Also a range "m-n" or a combination of list and
+range like "a,b,m-n,c,p-q" is allowed.
 """
 
 import calendar
@@ -57,12 +57,16 @@ def get_numeric_sequence(pattern, min_value, max_value):
     m,n -> [m,n]
     a-b,m,p-q -> [a..b,m,p..q] partial stepwidth 1
     """
-    pattern = pattern.strip()
+    # handle the * case
     if pattern == "*":
         return list(range(min_value, max_value + 1))
+
+    # handle the */n case
     if mo := RE_REPEAT.match(pattern):
         stepwidth = int(mo.group(1))
         return list(range(min_value, max_value + 1, stepwidth))
+
+    # handle everything else
     values = []
     for element in pattern.split(","):
         if mo := RE_SEQUENCE.match(element):
@@ -171,10 +175,18 @@ def get_next_day(values, previous_schedule, next_hour):
     return delta_days, next_day
 
 
-def get_next_month(values, previous_schedule, next_day):
+def get_next_month_and_year(values, previous_schedule, next_day):
     """
-    Calculates the next month to execute the task. If the next day is larger than the day from the previous_schedule the month should not change. Otherwise increment the month. Returns a tuple with
+    Calculates the next month to execute the task. If the next day is larger than the day from the previous_schedule the month should not change. Otherwise increment the month. Returns a tuple with the next year and the next month (as integer values).
     """
+    next_year = previous_schedule.year
+    if next_day > previous_schedule.day and previous_schedule.month in values:
+        next_month = previous_schedule.month
+    else:
+        next_month = get_next_value(previous_schedule.month, values)
+        if next_month <= previous_schedule.month:
+            next_year += 1
+    return next_month, next_year
 
 
 def get_next_schedule(crontab, previous_schedule):
@@ -194,5 +206,12 @@ def get_next_schedule(crontab, previous_schedule):
         next_minute
     )
 
+
+# interface class for refactoring
 class CronScheduler():
-    pass
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_next_schedule(self, previous_schedule=None):
+        pass

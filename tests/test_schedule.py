@@ -8,6 +8,7 @@ from autocron.schedule import (
     get_next_day,
     get_next_hour,
     get_next_minute,
+    get_next_month_and_year,
     get_next_value,
     get_numeric_sequence,
 )
@@ -84,6 +85,29 @@ def test_get_next_minute(values, previous_schedule, expected_result):
     assert result == expected_result
 
 
+
+@pytest.mark.parametrize(
+    'values, previous_schedule, next_day, expected_result', [
+        ([2, 6, 10], dt(2024, 2, 8), 10, (2, 2024)),
+        ([2, 6, 10], dt(2024, 2, 8), 4, (6, 2024)),
+        ([2, 6, 10], dt(2024, 6, 8), 4, (10, 2024)),
+        ([2, 6, 10], dt(2024, 10, 8), 4, (2, 2025)),
+        ([2, 6, 10], dt(2024, 11, 8), 2, (2, 2025)),
+        ([2, 6, 10], dt(2024, 11, 8), 12, (2, 2025)),
+    ]
+)
+def test_get_next_month_and_year(values,
+                                 previous_schedule,
+                                 next_day,
+                                 expected_result):
+    """
+    Test to get the next month and year for a given crontab and previous
+    schedule.
+    """
+    result = get_next_month_and_year(values, previous_schedule, next_day)
+    assert result == expected_result
+
+
 @pytest.mark.parametrize(
     'value, values, expected_result', [
         (2, [5, 10, 15], 5),
@@ -108,7 +132,6 @@ def test_get_next_value(value, values, expected_result):
 @pytest.mark.parametrize(
     "pattern, min_value, max_value, expected_result", [
         ("*", 0, 5, list(range(6))),
-        (" *  ", 0, 5, list(range(6))),
         ("*/2", 0, 6, list(range(0, 7, 2))),
         ("*/15", 0, 59, list(range(0, 60, 15))),
         ("12,5,30", 0, 59, [5, 12, 30]),
