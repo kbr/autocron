@@ -33,12 +33,13 @@ CRONTAB_MAX_VALUES = [59, 23, 31, 12, 6]
 CRONTAB_MIN_VALUES = [0, 0, 1, 1, 0]
 CRONTAB_SUBSTITUTE = re.compile(r"\[|\]|\s|_")
 
-MINUTES_PER_HOUR = 60
-HOURS_PER_DAY = 24
-
 RE_REPEAT = re.compile(r"\*/(\d+)")
 RE_SEQUENCE = re.compile(r"(\d+)-(\d+)")
 
+MINUTES_PER_HOUR = 60
+HOURS_PER_DAY = 24
+DAYS_PER_WEEK = 7
+MAX_DAYS_PER_MONTH = 31
 MAX_ADAPT_SCHEDULE_ITERATION = 10_000
 MAX_ADAPT_SCHEDULE_ERROR_MSG = """\
 max schedule iteration ({}) exceeded. Date to far in the future.
@@ -123,6 +124,21 @@ def get_days_per_month(year=None, month=None, schedule=None):
     _, days_per_month = calendar.monthrange(year, month)
     return days_per_month
 
+
+def get_weekday(year=None, month=None, day=None, schedule=None):
+    """
+    Takes year, month and day and returns the weekday as an integer,
+    where monday is 1 and sunday is 0. This is in sync with the used
+    crontab but differs from the calender-module, where monday is 0 and
+    sunday is 6. If schedule is given this is assumed to be a datetime
+    object and in this case the other arguments are ignored.
+    """
+    if schedule is not None:
+        year = schedule.year
+        month = schedule.month
+        day = schedule.day
+    weekday = calendar.weekday(year, month, day) + 1
+    return 0 if weekday > 6 else weekday
 
 
 # ---------------------------------------------------
@@ -240,7 +256,8 @@ class CronScheduler():
                  hours=None,
                  days=None,
                  months=None,
-                 days_of_week=None):
+                 days_of_week=None,
+                 strict_mode=False):
         if not crontab:
             items = [str(item) if item else "*"
                      for item in (minutes, hours, days, months, days_of_week)]
@@ -249,8 +266,28 @@ class CronScheduler():
                 "_".join(items)
             )
         self.cron_parts = get_cron_parts(crontab)
+        self.strict_mode = strict_mode
         self.previous_schedule = None
 
+    @property
+    def all_days_allowed(self):
+        """
+        Returns a boolean if all days in a month are allowed. By default
+        these are 31 days represented by "*". The correct number of days
+        for a given month is calculated elsewhere. So it is not
+        necessary to provide a list like "[1..28]" for February – indeed
+        this would be an error.
+        """
+        return len(self.cron_parts.days) >= MAX_DAYS_PER_MONTH
+
+    @property
+    def all_weekdays_allowed(self):
+        """
+        Returns a boolean whether all weekdays are allowed (corresponds
+        to the * or 0-6 in the crontab). In this case return True,
+        otherwise False.
+        """
+        return len(self.cron_parts.days_of_week) >= DAYS_PER_WEEK
 
     def get_next_schedule(self, previous_schedule=None):
         """
@@ -286,7 +323,7 @@ class CronScheduler():
         return get_next_value(prev.hour, cron.hours)
 
 
-    def get_next_day(self, next_hour, schedule=None):
+    def x_get_next_day(self, next_hour, schedule=None):
         """
         Calculates the next day to execute a task. If the next_hour is
         larger than the hour from the previous_schedule the day should
@@ -302,6 +339,54 @@ class CronScheduler():
         # get next day and check for valid day in month (i.e no yy/02/30)
         days_per_month = get_days_per_month(schedule=prev)
         next_day = get_next_value(prev.day, cron.days)
+        if next_day > days_per_month:
+            next_day -= days_per_month
+        return next_day
+
+    def get_next_day(self, next_hour, schedule=None):
+        """
+        Calculates the next day to execute a task. If the next_hour is
+        larger than the hour from the previous_schedule the day should
+        not change. Otherwise increment the day. If restriced_mode is not set (default) check if also weekdays are given. If one of the given weekdays
+        Furthermore check, whether
+        the incremented day is a valid day for the month of the previous
+        schedule. Returns the next_day.
+        """
+        prev =  schedule if schedule else self.previous_schedule
+        cron = self.cron_parts
+
+        def get_next_day_from_days():
+            # get next day from list of days:
+            if next_hour > prev.hour and prev.day in cron.days:
+                return prev.day
+            return get_next_value(prev.day, cron.days)
+
+        def get_next_day_from_weekdays():
+            # get next day fromlist of weekdays:
+            this_weekday = get_weekday(schedule=prev)
+            next_weekday = get_next_value(this_weekday, cron.days_of_week)
+            delta = (
+                next_weekday - this_weekday + DAYS_PER_WEEK
+            ) % DAYS_PER_WEEK
+            return prev.day + delta
+
+        if self.all_weekdays_allowed:
+            next_day = get_next_day_from_days()
+        else:
+            if self.all_days_allowed:
+                next_day = get_next_day_from_weekdays()
+            else:
+                if self.strict_mode:
+                    # check the day in a later step
+                    next_day = get_next_day_from_days()
+                else:
+                    next_day = min(
+                        get_next_day_from_days(),
+                        get_next_day_from_weekdays()
+                    )
+
+        # check for valid day in month (i.e no yy/02/30)
+        days_per_month = get_days_per_month(schedule=prev)
         if next_day > days_per_month:
             next_day -= days_per_month
         return next_day
@@ -354,7 +439,8 @@ class CronScheduler():
         tested again until a match is found. If the number of tests
         exceed the MAX_ADAPT_SCHEDULE_ITERATION limit a ValueError is
         raised. On success returns the new schedule as a datetime
-        object.
+        object. (This method must get called in restricted mode, but not
+        otherwise.)
         """
         for n in itertools.count():
             if n > MAX_ADAPT_SCHEDULE_ITERATION:
