@@ -185,17 +185,21 @@ def test_get_next_day(crontab, previous_schedule, next_hour, expected_result):
 
 @pytest.mark.parametrize(
     'crontab, previous_schedule, next_day, expected_result', [
-        ("* * * 2,6,10 *", dt(2024, 2, 8), 10, (2, 2024)),
-        ("* * * 2,6,10 *", dt(2024, 2, 8), 4, (6, 2024)),
-        ("* * * 2,6,10 *", dt(2024, 6, 8), 4, (10, 2024)),
-        ("* * * 2,6,10 *", dt(2024, 10, 8), 4, (2, 2025)),
-        ("* * * 2,6,10 *", dt(2024, 11, 8), 2, (2, 2025)),
-        ("* * * 2,6,10 *", dt(2024, 11, 8), 12, (2, 2025)),
-        ("* * * 1,2,3 *", dt(2024, 1, 31), 30, (3, 2024)),
-        ("* * * 2 *", dt(2024, 2, 29), 29, (3, 2024)),
+#         ("* * * 2,6,10 *", dt(2024, 2, 8), 10, (2, 2024)),
+#         ("* * * 2,6,10 *", dt(2024, 2, 8), 4, (6, 2024)),
+#         ("* * * 2,6,10 *", dt(2024, 6, 8), 4, (10, 2024)),
+#         ("* * * 2,6,10 *", dt(2024, 10, 8), 4, (2, 2025)),
+#         ("* * * 2,6,10 *", dt(2024, 11, 8), 2, (2, 2025)),
+#         ("* * * 2,6,10 *", dt(2024, 11, 8), 12, (2, 2025)),
+#         ("* * * 1,2,3 *", dt(2024, 1, 31), 20, (2, 2024)),
+#         ("* * * 1,2,3 *", dt(2024, 1, 31), 30, (3, 2024)),
+#         ("* * * 3 *", dt(2024, 2, 20), 22, (3, 2024)),
+#         ("* * * 3 *", dt(2024, 3, 20), 22, (3, 2024)),
+#         ("* * * 3 *", dt(2024, 3, 20), 20, (3, 2025)),
+        ("* * * 2 *", dt(2024, 2, 29), 29, (2, 2025)),
     ]
 )
-def x_test_get_next_month_and_year(crontab,
+def test_get_next_month_and_year(crontab,
                                  previous_schedule,
                                  next_day,
                                  expected_result):
@@ -207,9 +211,6 @@ def x_test_get_next_month_and_year(crontab,
     cs.previous_schedule = previous_schedule
     result = cs.get_next_month_and_year(next_day)
     assert result == expected_result
-
-
-
 
 
 @pytest.mark.parametrize(

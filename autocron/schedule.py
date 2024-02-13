@@ -141,113 +141,6 @@ def get_weekday(year=None, month=None, day=None, schedule=None):
     return 0 if weekday > 6 else weekday
 
 
-# ---------------------------------------------------
-# refactor from here to methods:
-
-
-
-
-# def get_next_minute(values, previous_schedule):
-#     """
-#     Calculates the next minute to execute a task based on the previous
-#     schedule and the minute values of the parsed crontab. Return a tuple
-#     with a delta_minute and the next_minute. delta minute is the
-#     difference between the next_minute and the minute from the
-#     previous_schedule.
-#     """
-#     previous_minute = previous_schedule.minute
-#     next_minute = get_next_value(previous_minute, values)
-#     delta_minutes = next_minute - previous_minute
-#     if next_minute <= previous_minute:
-#         delta_minutes += MINUTES_PER_HOUR
-#     return delta_minutes, next_minute
-#
-#
-# def get_next_hour(values, previous_schedule, next_minute):
-#     """
-#     Calculates the next hour to execute a task. If the next_minute is
-#     larger than the minute from the previous_schedule then the hour
-#     should not change. Otherwise increment the hour. Returns a tuple
-#     with delta_hour and the next_hour.
-#     """
-#     previous_minute = previous_schedule.minute
-#     previous_hour = previous_schedule.hour
-#     if next_minute > previous_minute and previous_hour in values:
-#         delta_hours = 0
-#         next_hour = previous_hour
-#     else:
-#         next_hour = get_next_value(previous_hour, values)
-#         delta_hours = next_hour - previous_hour
-#         if next_hour <= previous_hour:
-#             delta_hours += HOURS_PER_DAY
-#     return delta_hours, next_hour
-#
-#
-# def get_next_day(values, previous_schedule, next_hour):
-#     """
-#     Calculates the next day to execute a task. If the next_hour is
-#     larger than the hour from the previous_schedule the the day should
-#     not change. Otherwise increment the day. Furthermore check, whether
-#     the incremented day is a valid day for the month of the previous
-#     schedule. Returns a tuple with the delta_days and the next_day.
-#     """
-#     previous_hour = previous_schedule.hour
-#     previous_day = previous_schedule.day
-#     if next_hour > previous_hour and previous_day in values:
-#         delta_days = 0
-#         next_day = previous_day
-#     else:
-#         _, days_per_month = calendar.monthrange(
-#             previous_schedule.year, previous_schedule.month
-#         )
-#         next_day = get_next_value(previous_day, values)
-#         delta_days = next_day - previous_day
-#         if next_day <= previous_day:
-#             delta_days += days_per_month
-#         if next_day > days_per_month:
-#             next_day -= days_per_month
-#     return delta_days, next_day
-#
-#
-# def get_next_month_and_year(values, previous_schedule, next_day):
-#     """
-#     Calculates the next month to execute the task. If the next day is larger than the day from the previous_schedule the month should not change. Otherwise increment the month. Returns a tuple with the next year and the next month (as integer values).
-#     """
-#     next_year = previous_schedule.year
-#     if next_day > previous_schedule.day and previous_schedule.month in values:
-#         next_month = previous_schedule.month
-#     else:
-#         next_month = get_next_value(previous_schedule.month, values)
-#         if next_month <= previous_schedule.month:
-#             next_year += 1
-#     return next_month, next_year
-#
-#
-# def adapt_schedule_for_valid_day_of_week(values, schedule):
-#     """
-#     Checks whether the given schedule applys to the days of week given by values (0 to 6 for sunday to saturday). If this is not the case the
-#     """
-#
-#
-# def get_next_schedule(crontab, previous_schedule):
-#     """
-#     Takes a crontab string and the datetime-object of the previous
-#     schedule. Calculates the next schedule and returns this also as a
-#     datetime-object.
-#     """
-#     cron_parts = get_cron_parts(crontab)
-#     delta_minutes, next_minute = get_next_minute(
-#         cron_parts.minutes,
-#         previous_schedule
-#     )
-#     delta_hours, next_hour = get_next_hour(
-#         cron_parts.hours,
-#         previous_schedule,
-#         next_minute
-#     )
-
-
-# interface class for refactoring
 class CronScheduler():
 
     def __init__(self,
@@ -322,27 +215,6 @@ class CronScheduler():
             return prev.hour
         return get_next_value(prev.hour, cron.hours)
 
-
-    def x_get_next_day(self, next_hour, schedule=None):
-        """
-        Calculates the next day to execute a task. If the next_hour is
-        larger than the hour from the previous_schedule the day should
-        not change. Otherwise increment the day. Furthermore check, whether
-        the incremented day is a valid day for the month of the previous
-        schedule. Returns the next_day.
-        """
-        prev =  schedule if schedule else self.previous_schedule
-        cron = self.cron_parts
-        if next_hour > prev.hour and prev.day in cron.days:
-            return prev.day
-
-        # get next day and check for valid day in month (i.e no yy/02/30)
-        days_per_month = get_days_per_month(schedule=prev)
-        next_day = get_next_value(prev.day, cron.days)
-        if next_day > days_per_month:
-            next_day -= days_per_month
-        return next_day
-
     def get_next_day(self, next_hour, schedule=None):
         """
         Calculates the next day to execute a task. If the next_hour is
@@ -370,6 +242,9 @@ class CronScheduler():
             ) % DAYS_PER_WEEK
             return prev.day + delta
 
+        # get the next day depending on days- and weekdays-settings
+        # (this could also be written by use of elif, but would
+        # be harder to understand)
         if self.all_weekdays_allowed:
             next_day = get_next_day_from_days()
         else:
@@ -385,7 +260,9 @@ class CronScheduler():
                         get_next_day_from_weekdays()
                     )
 
-        # check for valid day in month (i.e no yy/02/30)
+        # check for valid day in month (i.e don't allow yy/02/30)
+        # in this case the day would changed from 30 to 1 on leap years
+        # and to 2 otherwise. Same for other months.
         days_per_month = get_days_per_month(schedule=prev)
         if next_day > days_per_month:
             next_day -= days_per_month
