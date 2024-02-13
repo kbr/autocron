@@ -23,7 +23,6 @@ range like "a,b,m-n,c,p-q" is allowed.
 
 import calendar
 import datetime
-import itertools
 import re
 import types
 
@@ -36,25 +35,23 @@ CRONTAB_SUBSTITUTE = re.compile(r"\[|\]|\s|_")
 RE_REPEAT = re.compile(r"\*/(\d+)")
 RE_SEQUENCE = re.compile(r"(\d+)-(\d+)")
 
-MINUTES_PER_HOUR = 60
-HOURS_PER_DAY = 24
 DAYS_PER_WEEK = 7
-MAX_DAYS_PER_MONTH = 31
-MAX_ADAPT_SCHEDULE_ITERATION = 10_000
-MAX_ADAPT_SCHEDULE_ERROR_MSG = """\
+MAX_SCHEDULE_ITERATIONS = 10_000
+MAX_SCHEDULE_ITERATIONS_ERROR_MSG = """\
 max schedule iteration ({}) exceeded. Date to far in the future.
 Current date: {}"""
 
 
 def get_next_value(value, values):
     """
-    Returns the next value from values which is larger then value or the
-    first item from the sequence values.
+    Returns the next value from values which is larger then value or
+    None if there is no larger value. Assumes the values are in sorted
+    order.
     """
     for item in values:
         if item > value:
             return item
-    return values[0]
+    return None
 
 
 def get_numeric_sequence(pattern, min_value, max_value):
@@ -160,25 +157,12 @@ class CronScheduler():
             )
         self.cron_parts = get_cron_parts(crontab)
         self.strict_mode = strict_mode
-        self.previous_schedule = None
-
-    @property
-    def all_days_allowed(self):
-        """
-        Returns a boolean if all days in a month are allowed. By default
-        these are 31 days represented by "*". The correct number of days
-        for a given month is calculated elsewhere. So it is not
-        necessary to provide a list like "[1..28]" for February – indeed
-        this would be an error.
-        """
-        return len(self.cron_parts.days) >= MAX_DAYS_PER_MONTH
 
     @property
     def all_weekdays_allowed(self):
         """
-        Returns a boolean whether all weekdays are allowed (corresponds
-        to the * or 0-6 in the crontab). In this case return True,
-        otherwise False.
+        Returns true if in the crontab all days of a week are allowed,
+        i.e. the asterisk "*" is set.
         """
         return len(self.cron_parts.days_of_week) >= DAYS_PER_WEEK
 
@@ -188,161 +172,132 @@ class CronScheduler():
         given previous_schedule (a datetime-object). Returns a
         datetime-object.
         """
+        dt = datetime.datetime
         if previous_schedule is None:
-            previous_schedule = datetime.datetime.now()
-        self.previous_schedule = previous_schedule
-        next_minute = self.get_next_minute()
+            previous_schedule = dt.now()
 
-    def get_next_minute(self):
-        """
-        Calculates the next minute to execute a task based on the
-        previous schedule and the minute values of the parsed crontab.
-        Return the next_minute.
-        """
-        return get_next_value(
-            self.previous_schedule.minute, self.cron_parts.minutes)
+        year = previous_schedule.year
+        month = previous_schedule.month
+        day = previous_schedule.day
+        hour = previous_schedule.hour
+        minute = previous_schedule.minute
 
-    def get_next_hour(self, next_minute):
-        """
-        Calculates the next hour to execute a task. If the next_minute
-        is larger than the minute from the previous_schedule then the
-        hour should not change. Otherwise increment the hour. Returns
-        the next hour.
-        """
-        prev = self.previous_schedule
-        cron = self.cron_parts
-        if next_minute > prev.minute and prev.hour in cron.hours:
-            return prev.hour
-        return get_next_value(prev.hour, cron.hours)
+        minute = self.get_next_minute(minute)
+        if minute is not None:
+            return dt(year, month, day, hour, minute)
 
-    def get_next_day(self, next_hour, schedule=None):
+        minute = self.cron_parts.minutes[0]  # get first minute
+        hour = self.get_next_hour(hour)
+        if hour is not None:
+            return dt(year, month, day, hour, minute)
+
+        hour = self.cron_parts.hours[0]  # get first hour
+        day = self.get_next_day(year, month, day)
+        if day is not None:
+            return dt(year, month, day, hour, minute)
+
+        for counter in range(MAX_SCHEDULE_ITERATIONS):
+            month = self.get_next_month(month)
+            if month:
+                day = self.get_first_day(year, month)
+                if day is not None:
+                    return dt(year, month, day, hour, minute)
+                continue
+            year += 1
+            month = self.cron_parts.months[0]  # get first month
+            day = self.get_first_day(year, month)
+            if day is not None:
+                return dt(year, month, day, hour, minute)
+
+        # not returning from inside the loop is a potential
+        # endless loop. So after MAX_SCHEDULE_ITERATIONS there
+        # is a hard break here:
+        schedule = dt(year, month, day, hour, minute)
+        msg = MAX_SCHEDULE_ITERATIONS_ERROR_MSG.format(counter, schedule)
+        raise ValueError()
+
+    def get_next_minute(self, minute):
         """
-        Calculates the next day to execute a task. If the next_hour is
-        larger than the hour from the previous_schedule the day should
-        not change. Otherwise increment the day. If restriced_mode is not set (default) check if also weekdays are given. If one of the given weekdays
-        Furthermore check, whether
-        the incremented day is a valid day for the month of the previous
-        schedule. Returns the next_day.
+        Returns the next minute of configured minutes. Returns None if
+        there is no next minute after the given one.
         """
-        prev =  schedule if schedule else self.previous_schedule
-        cron = self.cron_parts
+        return get_next_value(minute, self.cron_parts.minutes)
 
-        def get_next_day_from_days():
-            # get next day from list of days:
-            if next_hour > prev.hour and prev.day in cron.days:
-                return prev.day
-            return get_next_value(prev.day, cron.days)
+    def get_next_hour(self, hour):
+        """
+        Returns the next hour of configured hours. Returns None if
+        there is no next hour after the given one.
+        """
+        return get_next_value(hour, self.cron_parts.hours)
 
-        def get_next_day_from_weekdays():
-            # get next day fromlist of weekdays:
-            this_weekday = get_weekday(schedule=prev)
-            next_weekday = get_next_value(this_weekday, cron.days_of_week)
-            delta = (
-                next_weekday - this_weekday + DAYS_PER_WEEK
-            ) % DAYS_PER_WEEK
-            return prev.day + delta
+    def get_first_day(self, year, month):
+        """
+        Wrapper for get_next_day with day=0 to get the first allowed day
+        of a month or None, if the month has no allwed days.
+        """
+        return self.get_next_day(year, month, day=0)
 
-        # get the next day depending on days- and weekdays-settings
-        # (this could also be written by use of elif, but would
-        # be harder to understand)
+    def get_next_day(self, year, month, day):
+        """
+        Returns the next allowed day after the given day. Returns the
+        day or None in case that there is no follow up day for the month
+        and year.
+        """
+        next_day = get_next_value(day, self.cron_parts.days)
+
         if self.all_weekdays_allowed:
-            next_day = get_next_day_from_days()
+            # strict_mode doesn't matter
+            if next_day is not None:
+                if next_day <= get_days_per_month(year, month):
+                    return next_day
+            return None
+
+        if self.strict_mode:
+            if next_day is None:
+                return None
+            # check whether next_day is an allowed day of the
+            # current month.
+            if next_day > get_days_per_month(year, month):
+                return None
+            # the day must match one of the allowed weekdays
+            weekday_of_next_day = get_weekday(year, month, next_day)
+            if weekday_of_next_day in self.cron_parts.days_of_week:
+                return next_day
+            # recursion is save because there are just a few days per month
+            return self.get_next_day(year, month, next_day)
+
+        # no strict mode but days_of_week are defined:
+        # the next day and the next allowed weekday are valid days,
+        # return the one that comes first
+
+        # `day` could be zero to get the first day of the month.
+        # this is necessary for the first get_next_value() call
+        # but will trigger a ValueError in the calendar module.
+        # in this case set day to 1:
+
+        if day == 0:
+            day = 1
+        weekday_of_day = get_weekday(year, month, day)
+        next_weekday = get_next_value(
+            weekday_of_day,
+            self.cron_parts.days_of_week
+        )
+        if next_weekday is None:
+            next_weekday = self.cron_parts.days_of_week[0] + DAYS_PER_WEEK
+        delta = next_weekday - weekday_of_day
+        next_weekday_day = day + delta
+
+        if next_day is None:
+            next_day = next_weekday_day
         else:
-            if self.all_days_allowed:
-                next_day = get_next_day_from_weekdays()
-            else:
-                if self.strict_mode:
-                    # check the day in a later step
-                    next_day = get_next_day_from_days()
-                else:
-                    next_day = min(
-                        get_next_day_from_days(),
-                        get_next_day_from_weekdays()
-                    )
+            next_day = min(next_day, next_weekday_day)
+        if next_day <= get_days_per_month(year, month):
+            return next_day
+        return None
 
-        # check for valid day in month (i.e don't allow yy/02/30)
-        # in this case the day would changed from 30 to 1 on leap years
-        # and to 2 otherwise. Same for other months.
-        days_per_month = get_days_per_month(schedule=prev)
-        if next_day > days_per_month:
-            next_day -= days_per_month
-        return next_day
-
-    def get_next_month_and_year(self, next_day, schedule=None):
+    def get_next_month(self, month):
         """
-        Calculates the next month to execute the task. If the next day
-        is larger than the day from the previous_schedule the month
-        should not change. Otherwise increment the month. Returns a
-        tuple with the next year and the next month (as integer values).
+        Returns the next month of configured months. Returns None if
+        there is no next month after the given one.
         """
-        prev =  schedule if schedule else self.previous_schedule
-        cron = self.cron_parts
-        next_year = prev.year
-        prev_month = prev.month
-        if next_day > prev.day and prev_month in cron.months:
-            # the next_day provided as argument is in the allowed
-            # range of days of the current month (-> prev.month)
-            next_month = prev_month
-        else:
-            for n in range(MAX_ADAPT_SCHEDULE_ITERATION):
-                next_month = get_next_value(prev_month, cron.months)
-                if next_month <= prev_month:
-                    next_year += 1
-                # check whether the new month has enough days:
-                days_per_month = get_days_per_month(next_year, next_month)
-                if next_day > days_per_month:
-                    # invalid month: this can happen if the next day is in
-                    # the range 29-31, but the next month has fewer days.
-                    # in this case the next day is the first of the allowed
-                    # days and the next allowed month has to be found.
-                    next_day = cron.days[0]
-                    prev_month = next_month
-                else:
-                    # valid month and year found
-                    break
-            else:
-                # range exceeded: even if this is unlikely do a hard break
-                # for not running into an endless loop:
-                schedule = datetime.datetime(next_year, next_month, next_day)
-                msg = MAX_ADAPT_SCHEDULE_ERROR_MSG.format(n, schedule)
-                raise ValueError(msg)
-        return next_month, next_year
-
-    def get_adapted_schedule_for_valid_day_of_week(self, schedule):
-        """
-        Checks whether the given schedule applys to the days of week
-        given by values (0 to 6 for sunday to saturday). If this is not
-        the case the next day to execute the task is calculated and
-        tested again until a match is found. If the number of tests
-        exceed the MAX_ADAPT_SCHEDULE_ITERATION limit a ValueError is
-        raised. On success returns the new schedule as a datetime
-        object. (This method must get called in restricted mode, but not
-        otherwise.)
-        """
-        for n in itertools.count():
-            if n > MAX_ADAPT_SCHEDULE_ITERATION:
-                msg = MAX_ADAPT_SCHEDULE_ERROR_MSG.format(n, schedule)
-                raise ValueError(msg)
-            weekday = calendar.weekday(
-                schedule.year,
-                schedule.month,
-                schedule.day
-            )
-            if weekday not in self.cron_parts.days_of_week:
-                next_day = self.get_next_day(
-                    next_hour=schedule.hour,
-                    schedule=schedule
-                )
-                next_month, next_year = self.get_next_month_and_year(
-                    next_day,
-                    schedule=schedule
-                )
-                schedule = datetime.datetime(
-                    next_year,
-                    next_month,
-                    next_day,
-                    schedule.hour,
-                    schedule.minute
-                )
-            else:
-                return schedule
+        return get_next_value(month, self.cron_parts.months)
