@@ -1,7 +1,10 @@
 """
 Scheduler for cron-tasks.
 
-Takes a last schedule datetime-object and a crontab string and calcultes the next time a command should get executed. The crontab format used has five fields and a resolution of one minute (https://en.wikipedia.org/wiki/Cron):
+Takes a last schedule datetime-object and a crontab string and calcultes
+the next time a command should get executed. The crontab format used has
+five fields and a resolution of one minute
+(https://en.wikipedia.org/wiki/Cron):
 
 # ┌───────────── minute (0–59)
 # │ ┌───────────── hour (0–23)
@@ -139,7 +142,16 @@ def get_weekday(year=None, month=None, day=None, schedule=None):
 
 
 class CronScheduler():
+    """
+    Schedules a cron task.
 
+    Usage:
+
+    cs = CronScheduler()
+    next_schedule = cs.get_next_schedule()
+    """
+
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  crontab=None,
                  minutes=None,
@@ -214,7 +226,7 @@ class CronScheduler():
         # is a hard break here:
         schedule = dt(year, month, day, hour, minute)
         msg = MAX_SCHEDULE_ITERATIONS_ERROR_MSG.format(counter, schedule)
-        raise ValueError()
+        raise ValueError(msg)
 
     def get_next_minute(self, minute):
         """
@@ -243,6 +255,7 @@ class CronScheduler():
         day or None in case that there is no follow up day for the month
         and year.
         """
+        # pylint:disable=too-many-return-statements
         next_day = get_next_value(day, self.cron_parts.days)
 
         if self.all_weekdays_allowed:

@@ -20,9 +20,9 @@ interface = SQLiteInterface()
 def cron(crontab=None,
          minutes=None,
          hours=None,
-         dow=None,
+         days=None,
          months=None,
-         dom=None):
+         days_of_week=None):
     """
     Decorator for a cronjob. Functions running cronjobs should not get
     called from the main program and therefore don't get arguments.
@@ -69,11 +69,11 @@ def cron(crontab=None,
         is the same as ``*`` in a crontab, meaning that the task gets
         executed every hour.
 
-    :dow:
-        days of week. A list of integers from 0 to 6 with Monday as 0.
-        The task runs only on the given weekdays. Defaults to None which
-        is the same as ``*`` in a crontab, meaning that the task gets
-        executed every day of the week.
+    :days:
+        list of days in an month the task should run. Valid entries are
+        integers in the range 1-31. Defaults to None which is the same
+        as ``*`` in a crontab, meaning that the task gets executed every
+        day.
 
     :months:
         list of month during a year when the task should run. Valid
@@ -81,15 +81,16 @@ def cron(crontab=None,
         is the same as ``*`` in a crontab, meaning that the task gets
         executed every month.
 
-    :dom:
-        list of days in an month the task should run. Valid entries are
-        integers in the range 1-31. Defaults to None which is the same
-        as ``*`` in a crontab, meaning that the task gets executed every
-        day.
+    :days_of_week:
+        days of week. A list of integers from 0 to 6 with Monday as 0.
+        The task runs only on the given weekdays. Defaults to None which
+        is the same as ``*`` in a crontab, meaning that the task gets
+        executed every day of the week.
 
-    If neither *dom* nor *dow* are given, then the task will run every
-    day of a month. If one of both is set, then the given restrictions
-    apply. If both are set, then the allowed days complement each other.
+    If neither *days* nor *days_of_week* are given, then the task will
+    run every day of a month. If one of both is set, then the given
+    restrictions apply. If both are set, then the allowed days
+    complement each other.
     """
     # set crontab to default if no other arguments are given:
     if not any(locals().values()):
@@ -100,9 +101,9 @@ def cron(crontab=None,
             scheduler = CronScheduler(
                 minutes=minutes,
                 hours=hours,
-                dow=dow,
+                days=days,
                 months=months,
-                dom=dom,
+                days_of_week=days_of_week,
                 crontab=crontab
             )
             schedule = scheduler.get_next_schedule()
