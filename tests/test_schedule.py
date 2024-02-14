@@ -5,10 +5,6 @@ import pytest
 
 from autocron.schedule import (
     get_cron_parts,
-#     get_next_day,
-#     get_next_hour,
-#     get_next_minute,
-#     get_next_month_and_year,
     get_next_value,
     get_numeric_sequence,
     get_weekday,
@@ -21,17 +17,16 @@ from autocron.schedule import (
         (2, [5, 10, 15], 5),
         (5, [5, 10, 15], 10),
         (10, [5, 10, 15], 15),
-        (15, [5, 10, 15], 5),
-        (20, [5, 10, 15], 5),
+        (15, [5, 10, 15], None),
+        (20, [5, 10, 15], None),
         (2, [7], 7),
-        (7, [7], 7),
-        (9, [7], 7),
+        (7, [7], None),
+        (9, [7], None),
     ])
 def test_get_next_value(value, values, expected_result):
     """
     Check to get the next element from a sequence of values larger than
-    a given value. If there is no larger value, the first element from
-    the sequence should get returned.
+    a given value. If there is no larger value, None gets returned
     """
     result = get_next_value(value, values)
     assert result == expected_result
@@ -115,207 +110,113 @@ def test_get_weekday(schedule, expected_result):
 
 
 @pytest.mark.parametrize(
-    'crontab, previous_schedule, expected_result', [
-        ("10,20,25 * * * *", dt(2024, 2, 8, 2, 0), 10),
-        ("10,20,25 * * * *", dt(2024, 2, 8, 2, 10), 20),
-        ("10,20,25 * * * *", dt(2024, 2, 8, 2, 20), 25),
-        ("10,20,25 * * * *", dt(2024, 2, 8, 2, 25), 10),
-        ("10,20,25 * * * *", dt(2024, 2, 8, 2, 55), 10),
+    'crontab, minute, expected_result', [
+        ("10,20 * * * *", 5, 10),
+        ("10,20 * * * *", 15, 20),
+        ("10,20 * * * *", 20, None),
+        ("10,20 * * * *", 25, None),
     ]
 )
-def test_get_next_minute(crontab, previous_schedule, expected_result):
-    """
-    Test to get the next minute from the crontab list depending on the
-    previous schedule.
-    """
+def test_get_next_minute(crontab, minute, expected_result):
     cs = CronScheduler(crontab)
-    cs.previous_schedule = previous_schedule
-    result = cs.get_next_minute()
+    result = cs.get_next_minute(minute)
     assert result == expected_result
 
 
 @pytest.mark.parametrize(
-    'crontab, previous_schedule, next_minute, expected_result', [
-        ("* 10,12 * * *", dt(2024, 2, 8, 10, 30), 40, 10),
-        ("* 10,12 * * *", dt(2024, 2, 8, 10, 40), 20, 12),
-        ("* 10,12 * * *", dt(2024, 2, 8, 12, 20), 10, 10),
-        ("* 10,12 * * *", dt(2024, 2, 8, 2, 20), 10, 10),
-        ("* 10,12 * * *", dt(2024, 2, 8, 2, 20), 30, 10),
-        ("* 10,12 * * *", dt(2024, 2, 8, 11, 20), 30, 12),
+    'crontab, hour, expected_result', [
+        ("* 10,20 * * *", 5, 10),
+        ("* 10,20 * * *", 15, 20),
+        ("* 10,20 * * *", 20, None),
+        ("* 10,20 * * *", 23, None),
     ]
 )
-def test_get_next_hour(crontab, previous_schedule, next_minute,
-                       expected_result):
-    """
-    Test to get the next hour from the crontab list depending on the
-    previous schedule and the calculated next minute.
-    """
+def test_get_next_hour(crontab, hour, expected_result):
     cs = CronScheduler(crontab)
-    cs.previous_schedule = previous_schedule
-    result = cs.get_next_hour(next_minute)
+    result = cs.get_next_hour(hour)
     assert result == expected_result
 
 
 @pytest.mark.parametrize(
-    'crontab, previous_schedule, next_hour, expected_result', [
-        ("* * * * *", dt(2024, 2, 8, 10, 0), 11, 8),
-        ("* * 10,12 * *", dt(2024, 2, 8, 10, 0), 11, 10),
-        ("* * 10,12 * *", dt(2024, 2, 10, 10, 0), 11, 10),
-        ("* * 10,12 * *", dt(2024, 2, 10, 10, 0), 5, 12),
-        ("* * 10,12 * *", dt(2024, 2, 10, 10, 0), 10, 12),
-        ("* * 10,12 * *", dt(2024, 2, 11, 10, 0), 10, 12),
-        ("* * 10,12 * *", dt(2024, 2, 11, 10, 0), 14, 12),
-        ("* * 10,12 * *", dt(2024, 2, 12, 10, 0), 8, 10),
-        ("* * * * 1,4", dt(2024, 2, 8, 10, 0), 8, 12),
-        ("* * * * 1,4", dt(2024, 2, 12, 10, 0), 8, 15),
-        ("* * 6,13 * 1,4", dt(2024, 2, 12, 10, 0), 8, 13),
-        ("* * 6,16 * 1,4", dt(2024, 2, 12, 10, 0), 8, 15),
+    'crontab, month, expected_result', [
+        ("* * * * *", 5, 6),
+        ("* * * 7 *", 5, 7),
+        ("* * * 7,12 *", 7, 12),
+        ("* * * 7 *", 7, None),
+        ("* * * */2 *", 3, 5),
+        ("* * * */2 *", 11, None),
     ]
 )
-def test_get_next_day(crontab, previous_schedule, next_hour, expected_result):
-    """
-    Test to get the next day from the crontab list depending on the
-    previous schedule and the calculated next hour.
-    """
+def test_get_next_month(crontab, month, expected_result):
     cs = CronScheduler(crontab)
-    cs.previous_schedule = previous_schedule
-    result = cs.get_next_day(next_hour)
+    result = cs.get_next_month(month)
     assert result == expected_result
 
 
 @pytest.mark.parametrize(
-    'crontab, previous_schedule, next_day, expected_result', [
-#         ("* * * 2,6,10 *", dt(2024, 2, 8), 10, (2, 2024)),
-#         ("* * * 2,6,10 *", dt(2024, 2, 8), 4, (6, 2024)),
-#         ("* * * 2,6,10 *", dt(2024, 6, 8), 4, (10, 2024)),
-#         ("* * * 2,6,10 *", dt(2024, 10, 8), 4, (2, 2025)),
-#         ("* * * 2,6,10 *", dt(2024, 11, 8), 2, (2, 2025)),
-#         ("* * * 2,6,10 *", dt(2024, 11, 8), 12, (2, 2025)),
-#         ("* * * 1,2,3 *", dt(2024, 1, 31), 20, (2, 2024)),
-#         ("* * * 1,2,3 *", dt(2024, 1, 31), 30, (3, 2024)),
-#         ("* * * 3 *", dt(2024, 2, 20), 22, (3, 2024)),
-#         ("* * * 3 *", dt(2024, 3, 20), 22, (3, 2024)),
-#         ("* * * 3 *", dt(2024, 3, 20), 20, (3, 2025)),
-        ("* * * 2 *", dt(2024, 2, 29), 29, (2, 2025)),
+    'crontab, year, month, strict_mode, expected_result', [
+        ("* * * * *", 2024, 2, False, 1),
+        ("* * 10 * *", 2024, 2, False, 10),
+        ("* * 10 * 1", 2024, 2, False, 5),
+        ("* * 10 * 6", 2024, 2, True, 10),
+        ("* * 10 * 5", 2024, 2, True, None),
     ]
 )
-def test_get_next_month_and_year(crontab,
-                                 previous_schedule,
-                                 next_day,
-                                 expected_result):
-    """
-    Test to get the next month and year for a given crontab and previous
-    schedule.
-    """
-    cs = CronScheduler(crontab)
-    cs.previous_schedule = previous_schedule
-    result = cs.get_next_month_and_year(next_day)
+def test_get_first_day(crontab, year, month, strict_mode, expected_result):
+    cs = CronScheduler(crontab, strict_mode=strict_mode)
+    result = cs.get_first_day(year, month)
     assert result == expected_result
 
 
 @pytest.mark.parametrize(
-    'crontab, schedule, expected_schedule', [
-        ("* * * * *", dt(2024, 2, 8), dt(2024, 2, 8)),
-        ("* * * * 3", dt(2024, 2, 8), dt(2024, 2, 8)),
-        ("* * * * */3", dt(2024, 2, 8), dt(2024, 2, 8)),
-        ("* * 8,10 * 2", dt(2024, 2, 8), dt(2024, 4, 10)),
-        ("* * 13 * 4", dt(2024, 2, 13), dt(2024, 9, 13)),
-        ("* * 13 11 4", dt(2024, 2, 13), dt(2026, 11, 13)),
-        ("* * 8,15 2,7,8 2", dt(2024, 2, 8), dt(2026, 7, 8)),
-        ("* * 29 2 *", dt(2024, 2, 29), dt(2024, 2, 29)),
-#         ("* * 29 2 1", dt(2024, 2, 29), dt(2028, 2, 29)),
+    'crontab, year, month, day, strict_mode, expected_result', [
+        ("* * * * *", 2024, 2, 2, False, 3),
+        ("* * * * *", 2024, 2, 28, False, 29),
+        ("* * * * *", 2025, 2, 28, False, None),
+        ("* * 10,20 * *", 2024, 2, 5, False, 10),
+        ("* * 10,20 * *", 2024, 2, 10, False, 20),
+        ("* * 10,20 * *", 2024, 2, 22, False, None),
+        ("* * 10,20 * 1", 2024, 2, 28, False, None),
+        ("* * 10,20 * 2,5", 2024, 2, 2, False, 6),
+        ("* * 10,20 * 2,5", 2024, 2, 14, False, 16),
+        ("* * 10,20 * 2,5", 2024, 2, 23, False, 27),
+        ("* * 10,20 * 2,5", 2024, 2, 2, True, 20),
+        ("* * 10,21 * 3", 2024, 2, 2, True, 21),
+        ("* * 10,22 * 3", 2024, 2, 2, True, None),
     ]
 )
-def x_test_get_adapted_schedule_for_valid_day_of_week(crontab,
-                                                    schedule,
-                                                    expected_schedule):
-    """
-    Test to get the next schedule depending on the day_of_week in the
-    crontab.
-    """
-    cs = CronScheduler(crontab)
-    new_schedule = cs.get_adapted_schedule_for_valid_day_of_week(schedule)
-    assert new_schedule == expected_schedule
+def test_get_next_day(crontab, year, month, day, strict_mode, expected_result):
+    cs = CronScheduler(crontab, strict_mode=strict_mode)
+    result = cs.get_next_day(year, month, day)
+    assert result == expected_result
 
 
-
-
-# @pytest.mark.parametrize(
-#     'values, previous_schedule, next_hour, expected_result', [
-#         ([10, 12], dt(2024, 2, 8, 10, 0), 11, (2, 10)),
-#         ([10, 12], dt(2024, 2, 10, 10, 0), 11, (0, 10)),
-#         ([10, 12], dt(2024, 2, 10, 10, 0), 5, (2, 12)),
-#         ([10, 12], dt(2024, 2, 10, 10, 0), 10, (2, 12)),
-#         ([10, 12], dt(2024, 2, 12, 10, 0), 5, (27, 10)),  # leap year
-#         ([10, 12], dt(2023, 2, 12, 10, 0), 5, (26, 10)),  # not a leap year
-#         ([10, 12], dt(2023, 6, 12, 10, 0), 5, (28, 10)),  # from jun to jul
-#         ([10, 12], dt(2023, 7, 12, 10, 0), 5, (29, 10)),  # from jul to aug
-#     ]
-# )
-# def _test_get_next_day(values, previous_schedule, next_hour, expected_result):
-#     """
-#     Test to get the next day from the crontab list depending on the
-#     previous schedule and the calculated next hour.
-#     """
-#     result = get_next_day(values, previous_schedule, next_hour)
-#     assert result == expected_result
-
-
-# @pytest.mark.parametrize(
-#     'values, previous_schedule, next_minute, expected_result', [
-#         ([10, 12], dt(2024, 2, 8, 10, 30), 40, (0, 10)),
-#         ([10, 12], dt(2024, 2, 8, 10, 40), 20, (2, 12)),
-#         ([10, 12], dt(2024, 2, 8, 12, 20), 10, (22, 10)),
-#         ([10, 12], dt(2024, 2, 8, 2, 20), 10, (8, 10)),
-#         ([10, 12], dt(2024, 2, 8, 2, 20), 30, (8, 10)),
-#         ([10, 12], dt(2024, 2, 8, 11, 20), 30, (1, 12)),
-#     ]
-# )
-# def _test_get_next_hour(values, previous_schedule, next_minute, expected_result):
-#     """
-#     Test to get the next hour from the crontab list depending on the
-#     previous schedule and the calculated next minute.
-#     """
-#     result = get_next_hour(values, previous_schedule, next_minute)
-#     assert result == expected_result
-
-
-# @pytest.mark.parametrize(
-#     'values, previous_schedule, expected_result', [
-#         ([10, 20, 25], dt(2024, 2, 8, 2, 0), (10, 10)),
-#         ([10, 20, 25], dt(2024, 2, 8, 2, 10), (10, 20)),
-#         ([10, 20, 25], dt(2024, 2, 8, 2, 20), (5, 25)),
-#         ([10, 20, 25], dt(2024, 2, 8, 2, 25), (45, 10)),
-#         ([10, 20, 25], dt(2024, 2, 8, 2, 55), (15, 10)),
-#     ]
-# )
-# def _test_get_next_minute(values, previous_schedule, expected_result):
-#     """
-#     Test to get the next minute from the crontab list depending on the
-#     previous schedule.
-#     """
-#     result = get_next_minute(values, previous_schedule)
-#     assert result == expected_result
-
-
-# @pytest.mark.parametrize(
-#     'values, previous_schedule, next_day, expected_result', [
-#         ([2, 6, 10], dt(2024, 2, 8), 10, (2, 2024)),
-#         ([2, 6, 10], dt(2024, 2, 8), 4, (6, 2024)),
-#         ([2, 6, 10], dt(2024, 6, 8), 4, (10, 2024)),
-#         ([2, 6, 10], dt(2024, 10, 8), 4, (2, 2025)),
-#         ([2, 6, 10], dt(2024, 11, 8), 2, (2, 2025)),
-#         ([2, 6, 10], dt(2024, 11, 8), 12, (2, 2025)),
-#     ]
-# )
-# def _test_get_next_month_and_year(values,
-#                                  previous_schedule,
-#                                  next_day,
-#                                  expected_result):
-#     """
-#     Test to get the next month and year for a given crontab and previous
-#     schedule.
-#     """
-#     result = get_next_month_and_year(values, previous_schedule, next_day)
-#     assert result == expected_result
-
+@pytest.mark.parametrize(
+    'crontab, previous_schedule, strict_mode, expected_result', [
+        ("* * * * *", dt(2024, 2, 8, 10, 0), False, dt(2024, 2, 8, 10, 1)),
+        ("*/5 * * * *", dt(2024, 2, 8, 10, 24), False, dt(2024, 2, 8, 10, 25)),
+        ("*/5 * * * *", dt(2024, 2, 8, 10, 25), False, dt(2024, 2, 8, 10, 30)),
+        ("0,30 * * * *", dt(2024, 2, 8, 10, 25), False, dt(2024, 2, 8, 10, 30)),
+        ("0,30 * * * *", dt(2024, 2, 8, 10, 30), False, dt(2024, 2, 8, 11, 0)),
+        ("0,30 5,17 * * *", dt(2024, 2, 8, 10, 30), False, dt(2024, 2, 8, 17, 0)),
+        ("0,30 5,17 * * *", dt(2024, 2, 8, 17, 30), False, dt(2024, 2, 9, 5, 0)),
+        ("30 13 * * 5", dt(2024, 2, 8, 17, 30), False, dt(2024, 2, 9, 13, 30)),
+        ("30 13 * * 5", dt(2024, 2, 9, 13, 30), False, dt(2024, 2, 10, 13, 30)),
+        ("30 13 * * 5", dt(2024, 2, 9, 13, 30), True, dt(2024, 2, 16, 13, 30)),
+        ("30 13 * * 5", dt(2024, 2, 16, 13, 30), True, dt(2024, 2, 23, 13, 30)),
+        ("30 13 * * 5", dt(2024, 2, 23, 13, 30), True, dt(2024, 3, 1, 13, 30)),
+        ("30 13 29 2 *", dt(2024, 2, 27, 13, 30), False, dt(2024, 2, 29, 13, 30)),
+        ("30 13 29 2 *", dt(2024, 2, 29, 13, 30), False, dt(2028, 2, 29, 13, 30)),
+        ("30 13 29 2 0", dt(2024, 2, 29, 13, 30), False, dt(2025, 2, 2, 13, 30)),
+        ("30 13 29 2 0", dt(2024, 2, 29, 13, 30), True, dt(2032, 2, 29, 13, 30)),
+        ("30 13 7 * 3", dt(2024, 2, 7, 13, 30), True, dt(2024, 8, 7, 13, 30)),
+        ("30 13 7 2 3", dt(2024, 2, 7, 13, 30), True, dt(2029, 2, 7, 13, 30)),
+    ]
+)
+def test_get_next_schedule(crontab,
+                           previous_schedule,
+                           strict_mode,
+                           expected_result):
+    cs = CronScheduler(crontab, strict_mode=strict_mode)
+    result = cs.get_next_schedule(previous_schedule)
+    assert result == expected_result
