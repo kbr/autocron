@@ -12,11 +12,14 @@ settings: configuration settings for a project
 import datetime
 import pathlib
 import pickle
+import queue
 import sqlite3
+import threading
 import types
 
 
 DEFAULT_STORAGE = ".autocron"
+WRITE_THREAD_TIMEOUT = 2.0
 
 
 # -- table: task - structure and commands ------------------------------------
@@ -354,6 +357,53 @@ class TaskResult(HybridNamespace):
         return cls(data)
 
 
+# -------------------------------------
+# database access
+
+def _execute_sqlite_command(db_name, command, parameters=(), many=False):
+    """
+    Run a command with parameters. Parameters can be a sequence of
+    values to get used in an ordered way or a dictionary with
+    key-value pairs, where the keys are the value-names used in the
+    db (i.e. the column names).
+
+    If 'many' is true then conn.executemany() gets called and
+    parameters is interpreted differently as as sequence of ordered
+    tuples or dictionaries as placeholders for the provided command.
+
+    This is a blocking operation: the sqlite library will lock the
+    database per process when writing to the database and each process
+    will wait for the lock to be released to get their turn.
+    """
+    conn = sqlite3.connect(
+        db_name,
+        detect_types=sqlite3.PARSE_DECLTYPES
+    )
+    with conn:
+        if many:
+            return conn.executemany(command, parameters)
+        return conn.execute(command, parameters)
+
+
+def run_write_thread(exit_event, database_file, command_queue):
+    """
+    Start the write thread to delegate the blocking I/O out of the main
+    process, that may run by an async framework.
+    """
+    while True:
+        try:
+            item = command_queue.get(timeout=WRITE_THREAD_TIMEOUT)
+        except queue.Empty:
+            # check for exit_event on empty queue so the queue items
+            # can get handled before terminating the thread
+            if exit_event.is_set():
+                break
+        else:
+            # item is a sequence of arguments
+            cmd, parameters, many = item
+            _execute_sqlite_command(database_file, cmd, parameters, many)
+
+
 # pylint: disable=too-many-public-methods
 class SQLiteInterface:
     """
@@ -374,6 +424,9 @@ class SQLiteInterface:
         self._accept_registrations = True
         self._db_name = None
         self.autocron_lock_is_set = None
+        self.command_queue = None
+        self.write_thread = None
+        self.exit_event = None
 
     @property
     def db_name(self):
@@ -413,6 +466,30 @@ class SQLiteInterface:
     def is_initialized(self):
         """Flag whether the database is available."""
         return self._db_name is not None
+
+    def _execute(self, cmd, parameters=(), many=False):
+        """
+        Run a command with parameters. This is a wrapper for the
+        blocking _execute_sqlite_command() that gets executed in a
+        separate thread after autocron has run the start-up phase and
+        the engine has started the worker-monitor and the write-thread.
+        """
+        if self._db_name is None:
+            raise IOError("No autocron database defined.")
+
+        if self.write_thread and cmd in (CMD_STORE_TASK, CMD_STORE_RESULT):
+            # delegate blocking I/O to the write_thread
+            # the both commands are the ones used by register_callable()
+            # this way the delay() decorator is non-blocking at runtime.
+            data = cmd, parameters, many
+            self.command_queue.put(data)
+        else:
+            # do it in blocking mode. This can happen on start up
+            # before the writer thread has started.
+            # This will also happen from running the admin or the worker-
+            # process, because in both cases the engine starting the
+            # write_thread is not involved.
+            return _execute_sqlite_command(self._db_name, cmd, parameters, many)
 
     def _init_database(self):
         """
@@ -462,27 +539,6 @@ class SQLiteInterface:
         cursor = self._execute(cmd)
         number_of_rows = cursor.fetchone()[0]
         return number_of_rows
-
-    def _execute(self, cmd, parameters=(), many=False):
-        """
-        Run a command with parameters. Parameters can be a sequence of
-        values to get used in an ordered way or a dictionary with
-        key-value pairs, where the key are the value-names used in the
-        db (i.e. the column names).
-        If 'many' is true then con.executemany() gets called and
-        parameters is interpreted differently as as sequence of ordered
-        tuples or dictionaries as placehoöders for the provided cmd.
-        """
-        if self._db_name is None:
-            raise IOError("No autocron database defined.")
-        con = sqlite3.connect(
-            self._db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        with con:
-            if many:
-                return con.executemany(cmd, parameters)
-            return con.execute(cmd, parameters)
 
     def _set_storage_location(self, db_name):
         """
@@ -537,6 +593,33 @@ class SQLiteInterface:
                 new_status=TASK_STATUS_WAITING
             )
             self._register_preregistered_tasks()
+
+
+    # -- write_thread-methods ---
+
+    def start_write_thread(self):
+        """
+        Starts a thread to handle blocking I/O writing to the database.
+        """
+        # safety check for not starting the thread multiple times
+        if not self.write_thread:
+
+            self.command_queue = queue.Queue()
+            self.exit_event = threading.Event()
+            self.write_thread = threading.Thread(
+                target=run_write_thread,
+                args=(self.exit_event, self._db_name, self.command_queue)
+            )
+            self.write_thread.start()
+
+    def stop_write_thread(self):
+        """
+        Terminates a running write_thread.
+        """
+        if self.write_thread:
+            if self.exit_event:
+                self.exit_event.set()
+                self.write_thread = None
 
 
     # -- task-methods ---

@@ -131,7 +131,10 @@ class Engine:
         ):
             # in both cases start is not allowed
             return False
+
+        # set lock-flag as soon as possible
         self.interface.set_monitor_lock_flag(True)
+
         # this is a safety check for not starting more than
         # one monitor thread:
         if not self.monitor_thread:
@@ -142,6 +145,9 @@ class Engine:
                 args=(self.exit_event, database_file)
             )
             self.monitor_thread.start()
+
+        # and start the interface write-thread
+        self.interface.start_write_thread()
         return True
 
     def stop(self):
@@ -164,6 +170,8 @@ class Engine:
             settings.worker_pids = ""
             self.interface.set_settings(settings)
             self.interface.delete_cronjobs()
+        # also stop the interface write-thread
+        self.interface.stop_write_thread()
 
     def _terminate(self, signalnum, stackframe=None):
         """
