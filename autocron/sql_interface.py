@@ -360,6 +360,56 @@ class TaskResult(HybridNamespace):
 # -------------------------------------
 # database access
 
+class Executor:
+    """
+    SQLite execution wrapper that makes a commit after commands changing
+    the database-content and closes the connection after all work is
+    done.
+
+    usage:
+
+        with Executor(dbname) as executor:
+            cursor = executor.run(command, parameters)
+            rows = corsor.fetchall()
+            return rows
+
+    `run()` can get called as often as required. The database keeps
+    connected. Leaving the context will close the database connection.
+    """
+
+    def __init__(self, db_name):
+        self.db_name = db_name
+        self.connection = None
+
+    def __enter__(self):
+        self.connection = sqlite3.connect(
+            self.db_name,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        return self
+
+    def run(self, command, parameters, many=False):
+        """
+        Runs an sql command with the given parameters. If the command
+        supports qmark style, the parameters must be a tuple with the
+        parameters in the proper order. If many is True, the parameters
+        must be a sequence of tuples.
+
+        If the command supports named style, parameters should be a
+        dictionary. If many is True, parameters should be a sequence of
+        dicts.
+
+        Returns the result of the given command and causes a commit()
+        """
+        with conn:
+            if many:
+                return conn.executemany(command, parameters)
+            return conn.execute(command, parameters)
+
+    def __exit__(self, *args):
+        self.connection.close()
+
+
 def _execute_sqlite_command(db_name, command, parameters=(), many=False):
     """
     Run a command with parameters. Parameters can be a sequence of
@@ -385,7 +435,7 @@ def _execute_sqlite_command(db_name, command, parameters=(), many=False):
         return conn.execute(command, parameters)
 
 
-def run_write_thread(exit_event, database_file, command_queue):
+def run_write_thread(exit_event, db_name, command_queue):
     """
     Start the write thread to delegate the blocking I/O out of the main
     process, that may run by an async framework.
@@ -401,7 +451,7 @@ def run_write_thread(exit_event, database_file, command_queue):
         else:
             # item is a sequence of arguments
             cmd, parameters, many = item
-            _execute_sqlite_command(database_file, cmd, parameters, many)
+            _execute_sqlite_command(db_name, cmd, parameters, many)
 
 
 # pylint: disable=too-many-public-methods
@@ -709,6 +759,7 @@ class SQLiteInterface:
                 self.register_result(func, uuid, args=args, kwargs=kwargs)
         else:
             self._preregister_task(locals())
+
 
     def get_tasks(self):
         """
