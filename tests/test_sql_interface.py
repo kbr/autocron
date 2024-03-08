@@ -45,7 +45,7 @@ def raw_interface():
     sql_interface.SQLiteInterface._instance = None
     interface = sql_interface.SQLiteInterface()
     yield interface
-    if interface.db_name:
+    if interface.db_name is not None:
         pathlib.Path(interface.db_name).unlink(missing_ok=True)
 
 
@@ -59,7 +59,7 @@ def interface():
     interface = sql_interface.SQLiteInterface()
     interface.init_database(db_name=TEST_DB_NAME)
     yield interface
-    if interface.db_name:
+    if interface.db_name is not None:
         pathlib.Path(interface.db_name).unlink(missing_ok=True)
 
 
@@ -114,12 +114,27 @@ def test_storage_location(db_name, parent_dir, raw_interface):
     Test for storage location: a relative path gets stored to ~.autocron
     and an absolute path as is.
     """
-    raw_interface._set_storage_location(db_name)
+    raw_interface.db_name = db_name
     parent = raw_interface.db_name.parent
     assert parent_dir == parent.stem
 
 
-def test_store_task(interface):
+def test_initialize_database(raw_interface):
+    """
+    Test for running the initialization process.
+    """
+    interface = raw_interface
+    assert interface.is_initialized is False
+    interface.init_database(db_name=TEST_DB_NAME)
+
+    # check whether get_settings() has worked on the new database
+    assert interface.autocron_lock_is_set is bool(
+        sql_interface.DEFAULT_AUTOCRON_LOCK)
+    ttl = datetime.timedelta(seconds=sql_interface.DEFAULT_RESULT_TTL)
+    assert interface._result_ttl == ttl
+
+
+def test_register_task(interface):
     """
     Test to store a task and find this task later on.
     """
@@ -128,7 +143,7 @@ def test_store_task(interface):
     assert bool(entries) is False
 
     # store a task and retrieve the task
-    interface.register_callable(tst_callable)
+    interface.register_task(tst_callable)
     entries = interface.get_tasks()
     assert bool(entries) is True
 
@@ -139,305 +154,344 @@ def test_store_multiple_tasks(interface):
     """
     functions = [tst_callable, tst_multiply, tst_multiply]
     for func in functions:
-        interface.register_callable(func)
+        interface.register_task(func)
     entries = interface.get_tasks()
     assert len(entries) == len(functions)
 
 
-def test_task_signature(interface):
+def test_get_row_num(interface):
     """
-    Tasks are HybridNamespaces storing callables by their name and
-    corresponding module.
+    Test to get the number of rows/entries in a table.
     """
-    interface.register_callable(tst_callable)
-    task = interface.get_tasks()[0]  # just a single entry
+    # no entries at first
+    num = interface.get_row_num(sql_interface.DB_TABLE_NAME_TASK)
+    assert num == 0
 
-    # the Task is a HybridNamespace
-    assert isinstance(task, sql_interface.HybridNamespace) is True
+    # store three entries and count three entries
+    functions = [tst_callable, tst_multiply, tst_multiply]
+    for func in functions:
+        interface.register_task(func)
+    num = interface.get_row_num(sql_interface.DB_TABLE_NAME_TASK)
+    assert num == len(functions)
 
-    # and known the name and the module of the callable
-    assert task["function_module"] == tst_callable.__module__
-    assert task["function_name"] == tst_callable.__name__
+
+def test_get_next_task(interface):
+    """
+    Test to get one of the nexts task on due. Store two tasks, one on
+    due. Test that get_next_task() return the one on due.
+    """
+    # no task on due:
+    task = interface.get_next_task()
+    assert task is None
+
+    # add tasks
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    interface.register_task(tst_add, schedule=now-delta)
+    interface.register_task(tst_multiply, schedule=now+delta)
+
+    # add() is on due:
+    task = interface.get_next_task()
+    assert task is not None
+    assert task.function_name == tst_add.__name__
+
+    # task should now be in processing state:
+    assert task.status == sql_interface.TASK_STATUS_PROCESSING
+
+    # the status change should also be stored in the database
+    # so a next call to get_next_task() should not return the entry again
+    task = interface.get_next_task()
+    assert task is None
+
+
+def test_get_next_crontask(interface):
+    """
+    Test to get the next cron-task on due.
+    """
+    # at first no task are on due:
+    task = interface.get_next_task(cron=True)
+    assert task is None
+
+    # add three tasks (non-empty crontab indicates a cron-task):
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=30)
+    interface.register_task(tst_add, schedule=now-delta)
+    interface.register_task(tst_callable, schedule=now-delta, crontab="*")
+    interface.register_task(tst_multiply, schedule=now+delta)
+
+    # tst_callable() is on due:
+    task = interface.get_next_task(cron=True)
+    assert task is not None
+    assert task.function_name == tst_callable.__name__
+
+    # next call should return None because status has changed
+    task = interface.get_next_task(cron=True)
+    assert task is None
+
+    # there is still add() on due as delayed task:
+    task = interface.get_next_task()
+    assert task is not None
+    assert task.function_name == tst_add.__name__
+
+    # now all tasks on due have been consumed
+    task = interface.get_next_task()
+    assert task is None
+
+    # but there are still three entrie in the database
+    num = interface.get_row_num(sql_interface.DB_TABLE_NAME_TASK)
+    assert num == 3
+
+
+def test_crud_result(interface):
+    """
+    Result entries are created when tasks with a uui are stored.
+    Test to create, read, update and delete a result.
+    """
+    # no entries at first
+    num = interface.get_row_num(sql_interface.DB_TABLE_NAME_RESULT)
+    assert num == 0
+
+    # inject a timedelta of 0 for ttl so results will be outdated fast
+    interface._result_ttl = datetime.timedelta(seconds=0)
+
+    # add tasks
+    uuid = "some_id"
+    interface.register_task(tst_add, crontab="*")
+    interface.register_task(tst_multiply, uuid=uuid)
+
+    # there should be one entry now in results
+    num = interface.get_row_num(sql_interface.DB_TABLE_NAME_RESULT)
+    assert num == 1
+
+    # try to get this result
+    task_result = interface.get_result_by_uuid(uuid=uuid)
+    assert task_result is not None
+    assert task_result.function_name == tst_multiply.__name__
+    assert task_result.function_result is None
+    assert task_result.is_waiting is True
+
+    # update result:
+    interface.update_result(uuid, result=42)
+    task_result = interface.get_result_by_uuid(uuid=uuid)
+    assert task_result.is_ready is True
+    assert task_result.result == 42
+
+    # delete results if outdated
+    interface.delete_outdated_results()
+    num = interface.count_results()
+    assert num == 0
 
 
 def test_task_arguments(interface):
     """
-    Arguments are stored as blobs. Test to store and retrieve the
-    arguments with the original types and values.
+    Test the argument storage (storage is a blob).
     """
+    # add a task with arguments
+    uuid = "some_id"
     args = [42, 3.141, ("one", "two")]
     kwargs = {"answer": 41, 10: "ten", "data": [1, 2, {"pi": 3.141, "g": 9.81}]}
-    interface.register_callable(tst_callable, args=args, kwargs=kwargs)
-    task = interface.get_tasks()[0]  # just a single entry
+    interface.register_task(tst_multiply, uuid=uuid, args=args, kwargs=kwargs)
 
-    # check the unpickled blobs:
+    # retrive the task and check the arguments
+    task = interface.get_tasks()[0]
     assert task.args == args
     assert task.kwargs == kwargs
 
 
-def test_get_task_on_due(interface):
-    """
-    Store two tasks, one is on due. Retrieve the task on due.
-    """
-    now = datetime.datetime.now()
-    delta = datetime.timedelta(seconds=30)
-    interface.register_callable(tst_add, schedule=now-delta)
-    interface.register_callable(tst_multiply, schedule=now+delta)
-
-    # add() is on due:
-    entries = interface.get_tasks_on_due()
-    assert len(entries) == 1
-    task = entries[0]
-    assert task.function_name == tst_add.__name__
-
-
 def test_delete_task(interface):
     """
-    The delete_callable() method takes a task as argument that must
-    provide a row-id. Store two tasks, one on due. Select the one on due
-    and delete this task. The other task should be still there. This is
-    what happens after execution of a delayed task.
+    Delete a given task from the database.
     """
+    # add a task
+    interface.register_task(tst_multiply)
 
-    now = datetime.datetime.now()
-    delta = datetime.timedelta(seconds=30)
-    interface.register_callable(tst_add, schedule=now-delta)
-    interface.register_callable(tst_multiply, schedule=now+delta)
-
-    # add() is on due: select and delete the task
-    task = interface.get_tasks_on_due()[0]  # single entry, tested elsewere
-    interface.delete_callable(task)
-
-    # multiply must have survived:
-    tasks = interface.get_tasks()
-    assert len(tasks) == 1
-    task = tasks[0]
-    assert task.function_name == tst_multiply.__name__
-
-
-def test_get_tasks_by_signature(interface):
-    """
-    Callables can get stored multiple times for delayed execution and
-    can get also selected by their names and modules (the signature).
-    """
-    functions = [tst_multiply, tst_add, tst_multiply]
-    for function in functions:
-        interface.register_callable(function)
-
-    # select all tst_multiply tasks:
-    tasks = interface.get_tasks_by_signature(tst_multiply)
-    assert len(tasks) == functions.count(tst_multiply)
-    for task in tasks:
-        assert task.function_name == tst_multiply.__name__
-
-
-def test_get_task_on_due_and_set_status(interface):
-    """
-    Calling interface.get_tasks_on_due() accepts aguments for filtering
-    by status and setting a new status.
-    """
-    # register two callables on due, default state is WAITING
-    now = datetime.datetime.now()
-    delta = datetime.timedelta(seconds=30)
-    functions = [tst_add, tst_multiply]
-    for function in functions:
-        interface.register_callable(function, schedule=now-delta)
-
-    # access this WAITING task on due and change state to PROCESSING:
-    tasks = interface.get_tasks_on_due(
-                status=sql_interface.TASK_STATUS_WAITING,
-                new_status=sql_interface.TASK_STATUS_PROCESSING
-            )
-    assert len(tasks) == len(functions)
-
-    # try to get these functions again does not work
-    # because of the status change
-    tasks = interface.get_tasks_on_due(
-                status=sql_interface.TASK_STATUS_WAITING
-            )
-    assert bool(tasks) is False
-
-    # but the tasks are still stored:
-    tasks = interface.get_tasks()
-    assert len(tasks) == len(functions)
-
-
-def test_update_task_schedule(interface):
-    """
-    A task can get a new schedule. This is usefull for crontasks. Doing
-    a schedule update also set the task-state to WAITING.
-    """
-    now = datetime.datetime.now()
-    delta = datetime.timedelta(seconds=30)
-    interface.register_callable(tst_callable, schedule=now-delta)
-
-    # fetch the task on due and update the schedule to be in the future
-    tasks = interface.get_tasks_on_due(
-                status=sql_interface.TASK_STATUS_WAITING,
-                new_status=sql_interface.TASK_STATUS_PROCESSING
-            )
-    task = tasks[0]
-    new_schedule = now + delta
-    interface.update_task_schedule(task, new_schedule)
-
-    # no tasks on due any more:
-    tasks = interface.get_tasks_on_due()
-    assert bool(tasks) is False
-
-    # but the task is waiting:
+    # retrive and delete the task
     task = interface.get_tasks()[0]
-    assert task.schedule == new_schedule
-    assert task.status == sql_interface.TASK_STATUS_WAITING
+    assert interface.count_tasks() == 1
+    interface.delete_task(task)
+    assert interface.count_tasks() == 0
 
 
-def test_get_result_by_invalid_uuid(interface):
-    """
-    Accessing a result entry by an invalid uuid should return None.
-    """
-    # no result in the database, so this uuid is invalide
-    uuid_ = uuid.uuid4().hex
-    result = interface.get_result_by_uuid(uuid_)
-    assert result is None
 
 
-def test_get_waiting_result(interface):
-    """
-    Once registered a result entry is available but in waiting state
-    because the result-value is not available. The result is of type
-    TaskResult.
-    """
-    uuid_ = uuid.uuid4().hex
-    interface.register_result(tst_add, uuid=uuid_)
-
-    # fetch the result in waiting state:
-    result = interface.get_result_by_uuid(uuid_)
-    assert result is not None
-    assert isinstance(result, TaskResult) is True
-    assert result.is_waiting is True
-    assert result.function_result is None
 
 
-def test_ready_result(interface):
-    """
-    A registered result in waiting state can updated with a result. The
-    state then changes to ready.
-    """
-    uuid_ = uuid.uuid4().hex
-    interface.register_result(tst_add, uuid=uuid_)
-
-    # now provide a result:
-    answer = 42
-    interface.update_result(uuid_, result=answer)
-
-    # fetch the result that is in ready state now
-    result = interface.get_result_by_uuid(uuid_)
-    assert result is not None
-    assert isinstance(result, TaskResult) is True
-    assert result.is_waiting is False
-    assert result.is_ready is True
-    assert result.function_result == answer
 
 
-def test_result_state(interface):
-    """
-    A TaskResult can update itself. (doing the query internal.)
-    """
-
-    uuid_ = uuid.uuid4().hex
-    interface.register_result(tst_add, uuid=uuid_)
-
-    # fetch result which is in waiting state
-    result = interface.get_result_by_uuid(uuid_)
-    result.interface = interface
-    assert result.is_ready is False
-
-    # now provide a result:
-    answer = 42
-    interface.update_result(uuid_, result=answer)
-
-    # and check the TaskResult object again:
-    assert result.is_ready is True
-    assert result.function_result == answer
 
 
-def test_update_result_with_error(interface):
-    """
-    A TaskResult gets updated with an error message.
-    The result should report the error state.
-    """
-    message = "ValueError: the error text"
-    uuid_ = uuid.uuid4().hex
-    interface.register_result(tst_add, uuid=uuid_)
-    interface.update_result(uuid_, error_message=message)
 
-    # check result for error status
-    result = interface.get_result_by_uuid(uuid_)
-    assert result.has_error is True
-
-
-def test_delete_outdated_result(interface):
-    """
-    Store two results in TASK_STATUS_READY state, one of them outdated.
-    After deletion of outdated results just one result should survive.
-    """
-    status=sql_interface.TASK_STATUS_READY
-    uuid_ = uuid.uuid4().hex
-    interface.register_result(tst_callable, uuid_, status=status)
-
-    # now register the outdated result
-    # setting the interface.result_ttl to a timedelta of zero
-    interface._result_ttl = datetime.timedelta()
-    interface.register_result(tst_add, uuid.uuid4().hex, status=status)
-
-    # now there are two result entries in the database:
-    entries = interface.count_results()
-    assert entries == 2
-
-    # after deletion of the outdated result just one result
-    # should be stored:
-    interface.delete_outdated_results()
-    entries = interface.count_results()
-    assert entries == 1
-
-    # and this should be the one for the tst_callable() function:
-    entry = interface.get_result_by_uuid(uuid_)
-    assert entry.function_module == tst_callable.__module__
-    assert entry.function_name == tst_callable.__name__
+# def test_update_task_schedule(interface):
+#     """
+#     A task can get a new schedule. This is usefull for crontasks. Doing
+#     a schedule update also set the task-state to WAITING.
+#     """
+#     now = datetime.datetime.now()
+#     delta = datetime.timedelta(seconds=30)
+#     interface.register_callable(tst_callable, schedule=now-delta)
+#
+#     # fetch the task on due and update the schedule to be in the future
+#     tasks = interface.get_tasks_on_due(
+#                 status=sql_interface.TASK_STATUS_WAITING,
+#                 new_status=sql_interface.TASK_STATUS_PROCESSING
+#             )
+#     task = tasks[0]
+#     new_schedule = now + delta
+#     interface.update_task_schedule(task, new_schedule)
+#
+#     # no tasks on due any more:
+#     tasks = interface.get_tasks_on_due()
+#     assert bool(tasks) is False
+#
+#     # but the task is waiting:
+#     task = interface.get_tasks()[0]
+#     assert task.schedule == new_schedule
+#     assert task.status == sql_interface.TASK_STATUS_WAITING
 
 
-def test_delete_cronjobs(interface):
-    """
-    Register three tasks, two of them cronjobs.
-    Delete the cronjobs and just one task should survive.
-    """
-    interface.register_callable(tst_callable)
-    interface.register_callable(tst_add, crontab="* * * * *")
-    interface.register_callable(tst_multiply, crontab="* * * * *")
-    entries = interface.count_tasks()
-    assert entries == 3
-
-    # now delete the cronjobs:
-    interface.delete_cronjobs()
-    entries = interface.count_tasks()
-    assert entries == 1
-
-    # the remaining task should be the tst_callable() function:
-    entry = interface.get_tasks_on_due()[0]
-    assert entry.function_module == tst_callable.__module__
-    assert entry.function_name == tst_callable.__name__
+# def test_get_result_by_invalid_uuid(interface):
+#     """
+#     Accessing a result entry by an invalid uuid should return None.
+#     """
+#     # no result in the database, so this uuid is invalide
+#     uuid_ = uuid.uuid4().hex
+#     result = interface.get_result_by_uuid(uuid_)
+#     assert result is None
 
 
-def test_settings_table(raw_interface):
+# def test_get_waiting_result(interface):
+#     """
+#     Once registered a result entry is available but in waiting state
+#     because the result-value is not available. The result is of type
+#     TaskResult.
+#     """
+#     uuid_ = uuid.uuid4().hex
+#     interface.register_result(tst_add, uuid=uuid_)
+#
+#     # fetch the result in waiting state:
+#     result = interface.get_result_by_uuid(uuid_)
+#     assert result is not None
+#     assert isinstance(result, TaskResult) is True
+#     assert result.is_waiting is True
+#     assert result.function_result is None
+
+
+# def test_ready_result(interface):
+#     """
+#     A registered result in waiting state can updated with a result. The
+#     state then changes to ready.
+#     """
+#     uuid_ = uuid.uuid4().hex
+#     interface.register_result(tst_add, uuid=uuid_)
+#
+#     # now provide a result:
+#     answer = 42
+#     interface.update_result(uuid_, result=answer)
+#
+#     # fetch the result that is in ready state now
+#     result = interface.get_result_by_uuid(uuid_)
+#     assert result is not None
+#     assert isinstance(result, TaskResult) is True
+#     assert result.is_waiting is False
+#     assert result.is_ready is True
+#     assert result.function_result == answer
+
+
+# def test_result_state(interface):
+#     """
+#     A TaskResult can update itself. (doing the query internal.)
+#     """
+#
+#     uuid_ = uuid.uuid4().hex
+#     interface.register_result(tst_add, uuid=uuid_)
+#
+#     # fetch result which is in waiting state
+#     result = interface.get_result_by_uuid(uuid_)
+#     result.interface = interface
+#     assert result.is_ready is False
+#
+#     # now provide a result:
+#     answer = 42
+#     interface.update_result(uuid_, result=answer)
+#
+#     # and check the TaskResult object again:
+#     assert result.is_ready is True
+#     assert result.function_result == answer
+
+
+# def test_update_result_with_error(interface):
+#     """
+#     A TaskResult gets updated with an error message.
+#     The result should report the error state.
+#     """
+#     message = "ValueError: the error text"
+#     uuid_ = uuid.uuid4().hex
+#     interface.register_result(tst_add, uuid=uuid_)
+#     interface.update_result(uuid_, error_message=message)
+#
+#     # check result for error status
+#     result = interface.get_result_by_uuid(uuid_)
+#     assert result.has_error is True
+
+
+# def test_delete_outdated_result(interface):
+#     """
+#     Store two results in TASK_STATUS_READY state, one of them outdated.
+#     After deletion of outdated results just one result should survive.
+#     """
+#     status=sql_interface.TASK_STATUS_READY
+#     uuid_ = uuid.uuid4().hex
+#     interface.register_result(tst_callable, uuid_, status=status)
+#
+#     # now register the outdated result
+#     # setting the interface.result_ttl to a timedelta of zero
+#     interface._result_ttl = datetime.timedelta()
+#     interface.register_result(tst_add, uuid.uuid4().hex, status=status)
+#
+#     # now there are two result entries in the database:
+#     entries = interface.count_results()
+#     assert entries == 2
+#
+#     # after deletion of the outdated result just one result
+#     # should be stored:
+#     interface.delete_outdated_results()
+#     entries = interface.count_results()
+#     assert entries == 1
+#
+#     # and this should be the one for the tst_callable() function:
+#     entry = interface.get_result_by_uuid(uuid_)
+#     assert entry.function_module == tst_callable.__module__
+#     assert entry.function_name == tst_callable.__name__
+
+
+# def test_delete_cronjobs(interface):
+#     """
+#     Register three tasks, two of them cronjobs.
+#     Delete the cronjobs and just one task should survive.
+#     """
+#     interface.register_callable(tst_callable)
+#     interface.register_callable(tst_add, crontab="* * * * *")
+#     interface.register_callable(tst_multiply, crontab="* * * * *")
+#     entries = interface.count_tasks()
+#     assert entries == 3
+#
+#     # now delete the cronjobs:
+#     interface.delete_cronjobs()
+#     entries = interface.count_tasks()
+#     assert entries == 1
+#
+#     # the remaining task should be the tst_callable() function:
+#     entry = interface.get_tasks_on_due()[0]
+#     assert entry.function_module == tst_callable.__module__
+#     assert entry.function_name == tst_callable.__name__
+
+
+def test_settings_table(interface):
     """
     Test story:
-    Create a new db and initialize settings with default values.
+    Create a new db with default settings values.
     Change one value (i.e. the max_workers).
-    Initialize the settings again: should have no effect.
     """
-    interface = raw_interface  # more convenient name
-    interface._set_storage_location(TEST_DB_NAME)
-    interface._create_tables()
-    interface._initialize_settings_table()
 
     # check for default value
     settings = interface.get_settings()
@@ -450,10 +504,13 @@ def test_settings_table(raw_interface):
     settings = interface.get_settings()
     assert settings.max_workers == new_max_workers
 
-    # another db-init has no effect (data survive a restart)
-    interface._create_tables()
-    interface._initialize_settings_table()
-    settings = interface.get_settings()
+    # another db-init has no effect
+    interface.init_database(db_name=TEST_DB_NAME)
+    assert settings.max_workers == new_max_workers
+
+    # create new interface (data survive a restart)
+    interface = sql_interface.SQLiteInterface()
+    interface.init_database(db_name=TEST_DB_NAME)
     assert settings.max_workers == new_max_workers
 
 

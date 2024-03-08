@@ -22,6 +22,14 @@ DEFAULT_STORAGE = ".autocron"
 WRITE_THREAD_TIMEOUT = 2.0
 
 
+# Status codes used for task-status the result-entries:
+TASK_STATUS_WAITING = 1
+TASK_STATUS_PROCESSING = 2
+TASK_STATUS_READY = 3
+TASK_STATUS_ERROR = 4
+TASK_STATUS_UNAVAILABLE = 5
+
+
 # -- table: task - structure and commands ------------------------------------
 DB_TABLE_NAME_TASK = "task"
 CMD_CREATE_TASK_TABLE = f"""
@@ -58,6 +66,10 @@ CMD_GET_TASKS_ON_DUE = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}
     WHERE schedule <= ?"""
 CMD_GET_TASKS_ON_DUE_WITH_STATUS = CMD_GET_TASKS_ON_DUE + " AND status == ?"
+CMD_GET_NEXT_TASK =\
+     CMD_GET_TASKS_ON_DUE + f" AND status == {TASK_STATUS_WAITING}"
+CMD_GET_NEXT_CRONTASK=\
+    CMD_GET_NEXT_TASK + " AND crontab <> ''"
 CMD_GET_TASKS = f"""
     SELECT {TASK_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_TASK}"""
 CMD_UPDATE_TASK_STATUS = f"""
@@ -70,13 +82,6 @@ CMD_UPDATE_CRONTASK_SCHEDULE = f"""
 CMD_DELETE_TASK = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE rowid == ?"
 CMD_DELETE_CRON_TASKS = f"DELETE FROM {DB_TABLE_NAME_TASK} WHERE crontab <> ''"
 CMD_COUNT_TABLE_ROWS = "SELECT COUNT(*) FROM {table_name}"
-
-# Status codes used for task-status the result-entries:
-TASK_STATUS_WAITING = 1
-TASK_STATUS_PROCESSING = 2
-TASK_STATUS_READY = 3
-TASK_STATUS_ERROR = 4
-TASK_STATUS_UNAVAILABLE = 5
 
 
 # -- table: result - structure and commands ----------------------------------
@@ -155,6 +160,16 @@ DEFAULT_WORKER_IDLE_TIME = 2.0  # seconds
 DEFAULT_WORKER_PIDS = ""
 DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) for results in seconds
 
+DEFAULT_DATA = {
+    "max_workers": DEFAULT_MAX_WORKERS,
+    "running_workers": DEFAULT_RUNNING_WORKERS,
+    "monitor_lock": DEFAULT_MONITOR_LOCK,
+    "autocron_lock": DEFAULT_AUTOCRON_LOCK,
+    "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
+    "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
+    "worker_pids": DEFAULT_WORKER_PIDS,
+    "result_ttl": DEFAULT_RESULT_TTL
+}
 
 CMD_SETTINGS_STORE_VALUES = f"""
 INSERT INTO {DB_TABLE_NAME_SETTINGS} VALUES
@@ -250,23 +265,23 @@ class TaskResult(HybridNamespace):
     Helper class to make task-results more handy.
     """
 
-    def _refresh(self):
-        """
-        If the status is TASK_STATUS_WAITING try to update the
-        task_result dictionary with data retrieved from the database.
-        This will return a new task_result instance. If the new instance
-        is still in waiting status, do nothing. Otherwise update
-        self.__dict__ with the retrieved data.
-        The `interface` argument is for testing.
-        """
-        if self.status == TASK_STATUS_WAITING:
-            try:
-                result = self.interface.get_result_by_uuid(self.uuid)
-            except AttributeError:
-                pass
-            else:
-                if result is not None:
-                    self.__dict__.update(result.__dict__)
+#     def _refresh(self):
+#         """
+#         If the status is TASK_STATUS_WAITING try to update the
+#         task_result dictionary with data retrieved from the database.
+#         This will return a new task_result instance. If the new instance
+#         is still in waiting status, do nothing. Otherwise update
+#         self.__dict__ with the retrieved data.
+#         The `interface` argument is for testing.
+#         """
+#         if self.status == TASK_STATUS_WAITING:
+#             try:
+#                 result = self.interface.get_result_by_uuid(self.uuid)
+#             except AttributeError:
+#                 pass
+#             else:
+#                 if result is not None:
+#                     self.__dict__.update(result.__dict__)
 
     @property
     def result(self):
@@ -282,33 +297,33 @@ class TaskResult(HybridNamespace):
     @property
     def is_waiting(self):
         """indicates task still waiting to get processed."""
-        self._refresh()
+#         self._refresh()
         return self.status == TASK_STATUS_WAITING
 
     @property
     def is_ready(self):
         """indicates task has been processed."""
-        self._refresh()
+#         self._refresh()
         return self.status == TASK_STATUS_READY
 
     @property
     def has_error(self):
         """indicates error_message is set."""
-        self._refresh()
+#         self._refresh()
         return self.status == TASK_STATUS_ERROR
 
-    @classmethod
-    def from_data_tuple(cls, row_data):
-        """
-        Returns a new TaskResult-Instance initialized with a tuple
-        representing the data from result-table row.
-        """
-        column_names = RESULT_COLUMN_SEQUENCE.split(",")
-        data = dict(zip(column_names, row_data))
-        instance = cls(data)
-        instance.function_result = pickle.loads(instance.function_result)
-        instance.function_arguments = pickle.loads(instance.function_arguments)
-        return instance
+#     @classmethod
+#     def from_data_tuple(cls, row_data):
+#         """
+#         Returns a new TaskResult-Instance initialized with a tuple
+#         representing the data from result-table row.
+#         """
+#         column_names = RESULT_COLUMN_SEQUENCE.split(",")
+#         data = dict(zip(column_names, row_data))
+#         instance = cls(data)
+#         instance.function_result = pickle.loads(instance.function_result)
+#         instance.function_arguments = pickle.loads(instance.function_arguments)
+#         return instance
 
     @classmethod
     def from_function_call(cls, func, *args, **kwargs):
@@ -325,40 +340,40 @@ class TaskResult(HybridNamespace):
         }
         return cls(data)
 
-    @classmethod
-    def from_registration(cls, uuid, interface):
-        """
-        Returns a TaskResult-Instance with the state
-        TASK_STATUS_WAITING, the result None and a set uuid. This
-        instance can be used to call the ``update()`` method for a
-        delayed result.
-        """
-        data = {
-            "function_result": None,
-            "status": TASK_STATUS_WAITING,
-            "uuid": uuid,
-            "interface": interface
-        }
-        return cls(data)
+#     @classmethod
+#     def from_registration(cls, uuid, interface):
+#         """
+#         Returns a TaskResult-Instance with the state
+#         TASK_STATUS_WAITING, the result None and a set uuid. This
+#         instance can be used to call the ``update()`` method for a
+#         delayed result.
+#         """
+#         data = {
+#             "function_result": None,
+#             "status": TASK_STATUS_WAITING,
+#             "uuid": uuid,
+#             "interface": interface
+#         }
+#         return cls(data)
 
-    @classmethod
-    def from_none(cls):
-        """
-        Returns a new empty TaskResult-Instance if there is no waiting
-        function to call and no result to expect. The available
-        attributes are 'status' with the value TASK_STATUS_UNAVAILABLE and
-        the 'result' has the value None. All other attributes are
-        undefined and accessing them will raise an AttributeError.
-        """
-        data = {
-            "status": TASK_STATUS_UNAVAILABLE,
-            "function_result": None
-        }
-        return cls(data)
+#     @classmethod
+#     def from_none(cls):
+#         """
+#         Returns a new empty TaskResult-Instance if there is no waiting
+#         function to call and no result to expect. The available
+#         attributes are 'status' with the value TASK_STATUS_UNAVAILABLE and
+#         the 'result' has the value None. All other attributes are
+#         undefined and accessing them will raise an AttributeError.
+#         """
+#         data = {
+#             "status": TASK_STATUS_UNAVAILABLE,
+#             "function_result": None
+#         }
+#         return cls(data)
 
 
 # -------------------------------------
-# database access
+# database access and helpers
 
 class Executor:
     """
@@ -377,7 +392,8 @@ class Executor:
     connected. Leaving the context will close the database connection.
     """
 
-    def __init__(self, db_name):
+    def __init__(self, db_name, row_factory=None):
+        self.row_factory = row_factory
         self.db_name = db_name
         self.connection = None
 
@@ -386,9 +402,14 @@ class Executor:
             self.db_name,
             detect_types=sqlite3.PARSE_DECLTYPES
         )
+        if self.row_factory:
+            self.connection.row_factory = self.row_factory
         return self
 
-    def run(self, command, parameters, many=False):
+    def __exit__(self, *args):
+        self.connection.close()
+
+    def run(self, command, parameters=(), many=None):
         """
         Runs an sql command with the given parameters. If the command
         supports qmark style, the parameters must be a tuple with the
@@ -401,13 +422,61 @@ class Executor:
 
         Returns the result of the given command and causes a commit()
         """
-        with conn:
+        if parameters and many is None:
+            # try to find out whether it is many or not:
+            if isinstance(parameters, (tuple, list)):
+                # could be qmark parameters or a sequence of tuples or dicts
+                # take the first element of the sequence, if this is another
+                # sequence or dict then these are parameters for an
+                # executemany() command, else just execute()
+                many = isinstance(parameters[0], (tuple, list, dict))
+        with self.connection:
             if many:
-                return conn.executemany(command, parameters)
-            return conn.execute(command, parameters)
+                return self.connection.executemany(command, parameters)
+            return self.connection.execute(command, parameters)
 
-    def __exit__(self, *args):
-        self.connection.close()
+
+def task_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from a task-table to a
+    correponding HybridNamespace object.
+    """
+    function_arguments_column_name = TASK_COLUMN_SEQUENCE.rsplit(
+        ",", maxsplit=1)[-1]
+    data = {}
+    column_names = [entry[0] for entry in cursor.description]
+    for name, value in zip(column_names, row):
+        if name == function_arguments_column_name:
+            args, kwargs = pickle.loads(value)
+            data["args"] = args
+            data["kwargs"] = kwargs
+        else:
+            data[name] = value
+    return HybridNamespace(data)
+
+
+def result_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from the result-table to a
+    TaskResult instance.
+    """
+    column_names = [entry[0] for entry in cursor.description]
+    data = {name: value for name, value in zip(column_names, row)}
+    result = TaskResult(data)
+    result.function_result = pickle.loads(result.function_result)
+    result.function_arguments = pickle.loads(result.function_arguments)
+    return result
+
+
+def settings_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from a settings-table to a
+    correponding HybridNamespace object.
+    """
+    column_names = [entry[0] for entry in cursor.description]
+    data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
+            for name, value in zip(column_names, row)}
+    return HybridNamespace(data)
 
 
 def _execute_sqlite_command(db_name, command, parameters=(), many=False):
@@ -494,7 +563,15 @@ class SQLiteInterface:
         if db_name is None:
             self._db_name = None
         else:
-            self._set_storage_location(db_name)
+            path = pathlib.Path(db_name)
+            if not path.is_absolute():
+                try:
+                    path = pathlib.Path.home() / DEFAULT_STORAGE / path.name
+                except RuntimeError:
+                    # no home directory found
+                    path = pathlib.Path.cwd() / db_name
+            self._db_name = path
+#                 self._set_storage_location(db_name)
 
     @property
     def accept_registrations(self):
@@ -516,6 +593,13 @@ class SQLiteInterface:
     def is_initialized(self):
         """Flag whether the database is available."""
         return self._db_name is not None
+
+    @property
+    def result_ttl(self):
+        """
+        Returns the new ttl as a datetime instance with an offset of now.
+        """
+        return datetime.datetime.now() + self._result_ttl
 
     def _execute(self, cmd, parameters=(), many=False):
         """
@@ -541,75 +625,75 @@ class SQLiteInterface:
             # write_thread is not involved.
             return _execute_sqlite_command(self._db_name, cmd, parameters, many)
 
-    def _init_database(self):
-        """
-        Creates a new database in case that an older one is not existing
-        and in case of missing settings set the settings-default values.
-        """
-        self._create_tables()
-        self._initialize_settings_table()
-        settings = self.get_settings()
-        self.autocron_lock_is_set = settings.autocron_lock
-        self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
+#     def _init_database(self):
+#         """
+#         Creates a new database in case that an older one is not existing
+#         and in case of missing settings set the settings-default values.
+#         """
+#         self._create_tables()
+#         self._initialize_settings_table()
+#         settings = self.get_settings()
+#         self.autocron_lock_is_set = settings.autocron_lock
+#         self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
 
-    def _create_tables(self):
-        """
-        Create all used tables in case of a new db and missing tables.
-        """
-        self._execute(CMD_CREATE_TASK_TABLE)
-        self._execute(CMD_CREATE_RESULT_TABLE)
-        self._execute(CMD_CREATE_SETTINGS_TABLE)
+#     def _create_tables(self):
+#         """
+#         Create all used tables in case of a new db and missing tables.
+#         """
+#         self._execute(CMD_CREATE_TASK_TABLE)
+#         self._execute(CMD_CREATE_RESULT_TABLE)
+#         self._execute(CMD_CREATE_SETTINGS_TABLE)
 
-    def _initialize_settings_table(self):
-        """
-        Check for an existing settings row in the settings-table.
-        If there is no row create an entry with the default values.
-        """
-        rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
-        if not rows:
-            data = {
-                "max_workers": DEFAULT_MAX_WORKERS,
-                "running_workers": DEFAULT_RUNNING_WORKERS,
-                "monitor_lock": DEFAULT_MONITOR_LOCK,
-                "autocron_lock": DEFAULT_AUTOCRON_LOCK,
-                "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
-                "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
-                "worker_pids": DEFAULT_WORKER_PIDS,
-                "result_ttl": DEFAULT_RESULT_TTL
-            }
-            self._execute(CMD_SETTINGS_STORE_VALUES, data)
+#     def _initialize_settings_table(self):
+#         """
+#         Check for an existing settings row in the settings-table.
+#         If there is no row create an entry with the default values.
+#         """
+#         rows = self._count_table_rows(DB_TABLE_NAME_SETTINGS)
+#         if not rows:
+#             data = {
+#                 "max_workers": DEFAULT_MAX_WORKERS,
+#                 "running_workers": DEFAULT_RUNNING_WORKERS,
+#                 "monitor_lock": DEFAULT_MONITOR_LOCK,
+#                 "autocron_lock": DEFAULT_AUTOCRON_LOCK,
+#                 "monitor_idle_time": DEFAULT_MONITOR_IDLE_TIME,
+#                 "worker_idle_time": DEFAULT_WORKER_IDLE_TIME,
+#                 "worker_pids": DEFAULT_WORKER_PIDS,
+#                 "result_ttl": DEFAULT_RESULT_TTL
+#             }
+#             self._execute(CMD_SETTINGS_STORE_VALUES, data)
 
-    def _count_table_rows(self, table_name):
-        """
-        Helper function to count the number of entries in the given
-        table. Returns a numeric value. In case of an unknown table_name
-        a sqlite3.OperationalError will get raised.
-        """
-        cmd = CMD_COUNT_TABLE_ROWS.format(table_name=table_name)
-        cursor = self._execute(cmd)
-        number_of_rows = cursor.fetchone()[0]
-        return number_of_rows
+#     def _count_table_rows(self, table_name):
+#         """
+#         Helper function to count the number of entries in the given
+#         table. Returns a numeric value. In case of an unknown table_name
+#         a sqlite3.OperationalError will get raised.
+#         """
+#         cmd = CMD_COUNT_TABLE_ROWS.format(table_name=table_name)
+#         cursor = self._execute(cmd)
+#         number_of_rows = cursor.fetchone()[0]
+#         return number_of_rows
 
-    def _set_storage_location(self, db_name):
-        """
-        Set the database file location. If the path is absolute use the
-        path as is. The directory part of the path must exist. If the
-        path is relative the database file gets stored in the
-        '~.autocron/' directory. If the relative path has subdirectories
-        these directories are ignored and just the filename is used. If
-        no home directory is found on the running platform the current
-        working directory is used as a fallback. However in such cases
-        it would be safer to provide an absolute path to the database
-        location.
-        """
-        path = pathlib.Path(db_name)
-        if not path.is_absolute():
-            try:
-                path = pathlib.Path.home() / DEFAULT_STORAGE / path.name
-            except RuntimeError:
-                # no home directory found
-                path = pathlib.Path.cwd() / db_name
-        self._db_name = path
+#     def _set_storage_location(self, db_name):
+#         """
+#         Set the database file location. If the path is absolute use the
+#         path as is. The directory part of the path must exist. If the
+#         path is relative the database file gets stored in the
+#         '~.autocron/' directory. If the relative path has subdirectories
+#         these directories are ignored and just the filename is used. If
+#         no home directory is found on the running platform the current
+#         working directory is used as a fallback. However in such cases
+#         it would be safer to provide an absolute path to the database
+#         location.
+#         """
+#         path = pathlib.Path(db_name)
+#         if not path.is_absolute():
+#             try:
+#                 path = pathlib.Path.home() / DEFAULT_STORAGE / path.name
+#             except RuntimeError:
+#                 # no home directory found
+#                 path = pathlib.Path.cwd() / db_name
+#         self._db_name = path
 
     def _preregister_task(self, data):
         """
@@ -620,29 +704,86 @@ class SQLiteInterface:
         data = {k: v for k, v in data.items() if k != "self"}
         self._preregistered_tasks.append(data)
 
-    def _register_preregistered_tasks(self):
-        """
-        Run the stored registrations on the now up and
-        running database.
-        """
-        for data in self._preregistered_tasks:
-            self.register_callable(**data)
+#     def _register_preregistered_tasks(self):
+#         """
+#         Run the stored registrations on the now up and
+#         running database.
+#         """
+#         for data in self._preregistered_tasks:
+#             self.register_task(**data)
+
+#     def init_database(self, db_name):
+#         """
+#         Public callable for delayed initialization. Set the database
+#         (which is a string or Path) and runs the correponding
+#         initialization.
+#         """
+#         if not self.is_initialized:
+#             self._set_storage_location(db_name)
+#             self._init_database()
+#             # ignore the result, but set new state:
+#             self.get_tasks_on_due(
+#                 status=TASK_STATUS_PROCESSING,
+#                 new_status=TASK_STATUS_WAITING
+#             )
+#             self._register_preregistered_tasks()
+
 
     def init_database(self, db_name):
         """
-        Public callable for delayed initialization. Set the database
+        Callable for delayed initialization. Set the database
         (which is a string or Path) and runs the correponding
         initialization.
         """
+        # dev note: substitutes
+        # - _init_database()
+        # - _create_tables()
+        # - _initialize_settings_table
+
+        # don't run init multiple times
         if not self.is_initialized:
-            self._set_storage_location(db_name)
-            self._init_database()
-            # ignore the result, but set new state:
-            self.get_tasks_on_due(
-                status=TASK_STATUS_PROCESSING,
-                new_status=TASK_STATUS_WAITING
-            )
-            self._register_preregistered_tasks()
+            self.db_name = db_name
+
+            with Executor(self.db_name) as sql:
+                # create tables (if not existing)
+                sql.run(CMD_CREATE_TASK_TABLE)
+                sql.run(CMD_CREATE_RESULT_TABLE)
+                sql.run(CMD_CREATE_SETTINGS_TABLE)
+
+                # check for existing entries in the settings
+                # if there are no entries initialize the settings
+                # with the default values
+                cmd = CMD_COUNT_TABLE_ROWS.format(
+                    table_name=DB_TABLE_NAME_SETTINGS)
+                cursor = sql.run(cmd)
+                rows = cursor.fetchone()[0]
+                if not rows:
+                    sql.run(CMD_SETTINGS_STORE_VALUES, DEFAULT_DATA)
+
+                # all task still there from the last run
+                # are reset to TASK_STATUS_WAITING status:
+                cursor = sql.run(CMD_GET_TASKS)
+                cursor.row_factory = task_row_factory
+                parameters = [(TASK_STATUS_WAITING, task.rowid)
+                              for task in cursor.fetchall()]
+                if parameters:
+                    sql.run(CMD_UPDATE_TASK_STATUS, parameters)
+
+            # register all callables processed at import time
+            # before autocron started (should only be cron-tasks)
+            for data in self._preregistered_tasks:
+                self.register_task(**data)
+
+            # read some of the current settings
+            settings = self.get_settings()
+            self.autocron_lock_is_set = settings.autocron_lock
+            self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
+
+
+
+
+
+
 
 
     # -- write_thread-methods ---
@@ -653,7 +794,6 @@ class SQLiteInterface:
         """
         # safety check for not starting the thread multiple times
         if not self.write_thread:
-
             self.command_queue = queue.Queue()
             self.exit_event = threading.Event()
             self.write_thread = threading.Thread(
@@ -670,6 +810,143 @@ class SQLiteInterface:
             if self.exit_event:
                 self.exit_event.set()
                 self.write_thread = None
+
+
+    # -- database api ---
+
+    def get_row_num(self, table_name):
+        """
+        Return the number of entries in the given table.
+        """
+        cmd = CMD_COUNT_TABLE_ROWS.format(table_name=table_name)
+        with Executor(self.db_name) as sql:
+            cursor = sql.run(cmd)
+            return cursor.fetchone()[0]
+
+    def count_tasks(self):
+        """
+        Returns the number of rows in the task-table, therefore
+        providing the number of tasks stored in the database.
+        """
+        return self.get_row_num(DB_TABLE_NAME_TASK)
+
+    def count_results(self):
+        """
+        Returns the number of rows in the task-table, therefore
+        providing the number of tasks stored in the database.
+        """
+        return self.get_row_num(DB_TABLE_NAME_RESULT)
+
+    def register_task(self, func, schedule=None, crontab="", uuid="",
+                      args=None, kwargs=None, unique=False):
+        """
+        Store a callable in the task-table of the database. If the
+        callable is a delayed task with a potential result create also a
+        corresponding entry in the result table.
+        """
+        if not self.is_initialized:
+            self._preregister_task(locals())
+        else:
+            if not schedule:
+                schedule = datetime.datetime.now()
+            if args is None:
+                args = ()
+            if kwargs is None:
+                kwargs = {}
+            arguments = pickle.dumps((args, kwargs))
+            task_data = {
+                "uuid": uuid,
+                "schedule": schedule,
+                "status": TASK_STATUS_WAITING,
+                "crontab": crontab,
+                "function_module": func.__module__,
+                "function_name": func.__name__,
+                "function_arguments": arguments,
+            }
+
+            with Executor(self._db_name, row_factory=task_row_factory) as sql:
+                if unique:
+                    parameters = (func.__module__, func.__name__)
+                    cursor = sql.run(CMD_GET_TASKS_BY_NAME, parameters)
+                    for task in cursor.fetchall():
+                        sql.run(CMD_DELETE_TASK, [task.rowid])
+                sql.run(CMD_STORE_TASK, task_data)
+                # a delayed task has a uuid: create a result entry
+                if uuid:
+                    result_data = {
+                        "uuid": uuid,
+                        "status": TASK_STATUS_WAITING,
+                        "function_module": func.__module__,
+                        "function_name": func.__name__,
+                        "function_arguments": arguments,
+                        "function_result": pickle.dumps(None),
+                        "error_message": "",
+                        "ttl": self.result_ttl,
+                    }
+                    sql.run(CMD_STORE_RESULT, result_data)
+
+    def get_tasks(self):
+        """
+        Generic method to return all tasks as a list of HybridNamespace
+        instances.
+        """
+        with Executor(self._db_name, row_factory=task_row_factory) as sql:
+            cursor = sql.run(CMD_GET_TASKS)
+            return cursor.fetchall()
+
+    def get_next_task(self, cron=False):
+        """
+        Returns the next task on due in waiting state or None. If `cron`
+        is True returns only cron-tasks on due. If `cron` is False any
+        task on due may get returned (including cron).
+        """
+        # tuple with schedule as a single entry,
+        # because sql-command is qmark style
+        parameters = (datetime.datetime.now(),)
+        command = CMD_GET_NEXT_CRONTASK if cron else CMD_GET_NEXT_TASK
+        with Executor(self.db_name, row_factory=task_row_factory) as sql:
+            cursor = sql.run(command, parameters)
+            task = cursor.fetchone()
+            if task is not None:
+                task.status = TASK_STATUS_PROCESSING
+                sql.run(CMD_UPDATE_TASK_STATUS, (task.status, task.rowid))
+        return task
+
+    def delete_task(self, task):
+        """
+        Deletes the given task, which is a HybridNamespace object with
+        """
+        with Executor(self.db_name) as sql:
+            sql.run(CMD_DELETE_TASK, (task.rowid,))
+
+    def get_result_by_uuid(self, uuid):
+        """
+        Return a dataset (as TaskResult) or None.
+        """
+        with Executor(self.db_name, row_factory=result_row_factory) as sql:
+            cursor = sql.run(CMD_GET_RESULT_BY_UUID, (uuid,))
+            return cursor.fetchone()  # tuple of data or None
+
+    def update_result(self, uuid, result=None, error_message=""):
+        """
+        Updates the result-entry with the given `uuid` to status 1|2 and
+        stores the `result` or `error_message`.
+        """
+        status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
+        function_result = pickle.dumps(result)
+        ttl = self.result_ttl
+        parameters = (status, function_result, error_message, ttl, uuid)
+        with Executor(self.db_name) as sql:
+            sql.run(CMD_UPDATE_RESULT, parameters)
+
+    def delete_outdated_results(self):
+        """
+        Deletes results with status TASK_STATUS_READY that have exceeded
+        the time to live (ttl).
+        """
+        now = datetime.datetime.now()
+        with Executor(self.db_name) as sql:
+            sql.run(CMD_DELETE_OUTDATED_RESULTS, (now,))
 
 
     # -- task-methods ---
@@ -715,59 +992,51 @@ class SQLiteInterface:
         return [process(row) for row in cursor.fetchall()]
 
     # pylint: disable=too-many-arguments
-    def register_callable(
-        self,
-        func,
-        uuid="",
-        schedule=None,
-        status=TASK_STATUS_WAITING,
-        crontab="",
-        args=None,
-        kwargs=None,
-        unique=False,
-    ):
-        """
-        Store a callable in the task-table of the database. If the
-        argument `unique` is given, don't register a callable twice. In
-        this case an already registered callable with the same
-        signature (module.name) gets overwritten. This can be useful for
-        cron-tasks to not register them multiple times.
-        """
-        if self.is_initialized:
-            if unique:
-                tasks = self.get_tasks_by_signature(func)
-                for task in tasks:
-                    self.delete_callable(task)
-            if not schedule:
-                schedule = datetime.datetime.now()
-            if args is None:
-                args = ()
-            if kwargs is None:
-                kwargs = {}
-            arguments = pickle.dumps((args, kwargs))
-            data = {
-                "uuid": uuid,
-                "schedule": schedule,
-                "status": status,
-                "crontab": crontab,
-                "function_module": func.__module__,
-                "function_name": func.__name__,
-                "function_arguments": arguments,
-            }
-            self._execute(CMD_STORE_TASK, data)
-            if uuid:
-                self.register_result(func, uuid, args=args, kwargs=kwargs)
-        else:
-            self._preregister_task(locals())
 
-
-    def get_tasks(self):
-        """
-        Generic method to return all tasks as a list of HybridNamespace
-        instances.
-        """
-        cursor = self._execute(CMD_GET_TASKS)
-        return self._fetch_all_callable_entries(cursor)
+#     def register_callable(
+#         self,
+#         func,
+#         uuid="",
+#         schedule=None,
+#         status=TASK_STATUS_WAITING,
+#         crontab="",
+#         args=None,
+#         kwargs=None,
+#         unique=False,
+#     ):
+#         """
+#         Store a callable in the task-table of the database. If the
+#         argument `unique` is given, don't register a callable twice. In
+#         this case an already registered callable with the same
+#         signature (module.name) gets overwritten. This can be useful for
+#         cron-tasks to not register them multiple times.
+#         """
+#         if self.is_initialized:
+#             if unique:
+#                 tasks = self.get_tasks_by_signature(func)
+#                 for task in tasks:
+#                     self.delete_callable(task)
+#             if not schedule:
+#                 schedule = datetime.datetime.now()
+#             if args is None:
+#                 args = ()
+#             if kwargs is None:
+#                 kwargs = {}
+#             arguments = pickle.dumps((args, kwargs))
+#             data = {
+#                 "uuid": uuid,
+#                 "schedule": schedule,
+#                 "status": status,
+#                 "crontab": crontab,
+#                 "function_module": func.__module__,
+#                 "function_name": func.__name__,
+#                 "function_arguments": arguments,
+#             }
+#             self._execute(CMD_STORE_TASK, data)
+#             if uuid:
+#                 self.register_result(func, uuid, args=args, kwargs=kwargs)
+#         else:
+#             self._preregister_task(locals())
 
     def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
         """
@@ -803,13 +1072,13 @@ class SQLiteInterface:
         cursor = self._execute(CMD_GET_TASKS_BY_NAME, parameters)
         return self._fetch_all_callable_entries(cursor)
 
-    def delete_callable(self, entry):
-        """
-        Delete the entry in the callable-table. Entry should be a
-        dictionary as returned from `get_tasks_on_due()`. The row to delete
-        gets identified by the `rowid`.
-        """
-        self._execute(CMD_DELETE_TASK, [entry["rowid"]])
+#     def delete_callable(self, entry):
+#         """
+#         Delete the entry in the callable-table. Entry should be a
+#         dictionary as returned from `get_tasks_on_due()`. The row to delete
+#         gets identified by the `rowid`.
+#         """
+#         self._execute(CMD_DELETE_TASK, [entry["rowid"]])
 
     def get_crontasks(self):
         """
@@ -833,22 +1102,15 @@ class SQLiteInterface:
         parameters = schedule, TASK_STATUS_WAITING, task.rowid
         self._execute(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
-    def count_tasks(self):
-        """
-        Returns the number of rows in the task-table, therefore
-        providing the number of tasks stored in the database.
-        """
-        return self._count_table_rows(DB_TABLE_NAME_TASK)
-
 
     # -- result-methods ---
 
-    @property
-    def result_ttl(self):
-        """
-        Returns the new ttl as a datetime instance with an offset of now.
-        """
-        return datetime.datetime.now() + self._result_ttl
+#     @property
+#     def result_ttl(self):
+#         """
+#         Returns the new ttl as a datetime instance with an offset of now.
+#         """
+#         return datetime.datetime.now() + self._result_ttl
 
     def register_result(
             self,
@@ -883,47 +1145,44 @@ class SQLiteInterface:
         Generic method to return all results as a list of TaskResult
         instances.
         """
-        cursor = self._execute(CMD_GET_RESULTS)
-        rows = cursor.fetchall()
-        return [TaskResult.from_data_tuple(row) for row in rows]
+        with Executor(self.db_name, row_factory=result_row_factory) as sql:
+            cursor = sql.run(CMD_GET_RESULTS)
+            return cursor.fetchall()
 
-    def get_result_by_uuid(self, uuid):
-        """
-        Return a dataset (as TaskResult) or None.
-        """
-        cursor = self._execute(CMD_GET_RESULT_BY_UUID, (uuid,))
-        row = cursor.fetchone()  # tuple of data or None
-        if row:
-            result = TaskResult.from_data_tuple(row)
-        else:
-            result = None
-        return result
 
-    def update_result(self, uuid, result=None, error_message=""):
-        """
-        Updates the result-entry with the given `uuid` to status 1|2 and
-        stores the `result` or `error_message`.
-        """
-        status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
-        function_result = pickle.dumps(result)
-        ttl = self.result_ttl
-        parameters = status, function_result, error_message, ttl, uuid
-        self._execute(CMD_UPDATE_RESULT, parameters)
+#     def get_result_by_uuid(self, uuid):
+#         """
+#         Return a dataset (as TaskResult) or None.
+#         """
+#         with Executor(self.db_name, row_factory=result_row_factory)
+#             cursor = self._execute(CMD_GET_RESULT_BY_UUID, (uuid,))
+#             return cursor.fetchone()  # tuple of data or None
+#
+#     def update_result(self, uuid, result=None, error_message=""):
+#         """
+#         Updates the result-entry with the given `uuid` to status 1|2 and
+#         stores the `result` or `error_message`.
+#         """
+#         status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
+#         function_result = pickle.dumps(result)
+#         ttl = self.result_ttl
+#         parameters = status, function_result, error_message, ttl, uuid
+#         self._execute(CMD_UPDATE_RESULT, parameters)
 
-    def count_results(self):
-        """
-        Returns the number of rows in the task-table, therefore
-        providing the number of tasks stored in the database.
-        """
-        return self._count_table_rows(DB_TABLE_NAME_RESULT)
+#     def count_results(self):
+#         """
+#         Returns the number of rows in the task-table, therefore
+#         providing the number of tasks stored in the database.
+#         """
+#         return self._count_table_rows(DB_TABLE_NAME_RESULT)
 
-    def delete_outdated_results(self):
-        """
-        Deletes results with status TASK_STATUS_READY that have exceeded
-        the time to live (ttl).
-        """
-        now = datetime.datetime.now()
-        self._execute(CMD_DELETE_OUTDATED_RESULTS, (now,))
+#     def delete_outdated_results(self):
+#         """
+#         Deletes results with status TASK_STATUS_READY that have exceeded
+#         the time to live (ttl).
+#         """
+#         now = datetime.datetime.now()
+#         self._execute(CMD_DELETE_OUTDATED_RESULTS, (now,))
 
     # -- setting-methods ---
 
@@ -940,13 +1199,10 @@ class SQLiteInterface:
         - result_ttl
         - rowid (not a setting but included)
         """
-        cursor = self._execute(CMD_SETTINGS_GET_SETTINGS)
-        row = cursor.fetchone()  # there is only one row
-        col_names = SETTINGS_COLUMN_SEQUENCE.split(",")
-        data = dict(zip(col_names, row))
-        for key in BOOLEAN_SETTINGS:
-            data[key] = bool(data[key])
-        return HybridNamespace(data)
+        with Executor(self.db_name, row_factory=settings_row_factory) as sql:
+            cursor = sql.run(CMD_SETTINGS_GET_SETTINGS)
+            settings = cursor.fetchone()  # there is only one row
+        return settings
 
     def set_settings(self, settings):
         """
@@ -965,7 +1221,8 @@ class SQLiteInterface:
             settings.result_ttl,
             settings.rowid
         )
-        self._execute(CMD_SETTINGS_UPDATE, data)
+        with Executor(self._db_name) as sql:
+            sql.run(CMD_SETTINGS_UPDATE, data)
 
     def get_monitor_idle_time(self):
         """

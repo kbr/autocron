@@ -127,7 +127,7 @@ class Worker:
             self.interface.update_task_schedule(task, schedule)
         else:
             # not a cronjob: delete the task from the db
-            self.interface.delete_callable(task)
+            self.interface.delete_task(task)
 
 
 def start_worker():

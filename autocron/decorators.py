@@ -107,7 +107,13 @@ def cron(crontab=None,
                 crontab=crontab
             )
             schedule = scheduler.get_next_schedule()
-            interface.register_callable(
+#             interface.register_callable(
+#                 func,
+#                 schedule=schedule,
+#                 crontab=crontab,
+#                 unique=True  # don't register cron-tasks twice
+#             )
+            interface.register_task(
                 func,
                 schedule=schedule,
                 crontab=crontab,
