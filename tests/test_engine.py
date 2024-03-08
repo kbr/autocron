@@ -96,7 +96,7 @@ def test_delete_crontasks_on_shutdown(interface):
     interface.init_database(db_name=TEST_DB_NAME)
 
     # put a crontask in the database:
-    interface.register_callable(tst_cron, crontab="* * * * *")
+    interface.register_task(tst_cron, crontab="* * * * *")
     tasks = interface.get_tasks_by_signature(tst_cron)
     assert bool(tasks) is True  # entry in list
 

@@ -96,8 +96,8 @@ def test_suppress_identic_cronjobs(interface):
     callable registered by the cron() decorater should be in the
     database.
     """
-    interface.register_callable(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
-    interface.register_callable(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
+    interface.register_task(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
+    interface.register_task(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
     entries = interface.get_tasks_by_signature(tst_cron)
     assert len(entries) == 2
 

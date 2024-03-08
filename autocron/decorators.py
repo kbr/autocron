@@ -142,8 +142,8 @@ def delay(func):
             # active: return TaskResult in waiting state
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
-            interface.register_callable(func, **data)
-            result = TaskResult.from_registration(uid, interface)
+            interface.register_task(func, **data)
+            result = interface.get_result_by_uuid(uuid=uid)
         elif interface.autocron_lock_is_set:
             # inactive: return TaskResult in ready state
             # by calling the wrapped function. This will keep the
