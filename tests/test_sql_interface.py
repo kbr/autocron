@@ -209,26 +209,23 @@ def test_get_next_crontask(interface):
     Test to get the next cron-task on due.
     """
     # at first no task are on due:
-    task = interface.get_next_task(cron=True)
+    task = interface.get_next_task()
     assert task is None
 
     # add three tasks (non-empty crontab indicates a cron-task):
     now = datetime.datetime.now()
-    delta = datetime.timedelta(seconds=30)
+    delta = datetime.timedelta(seconds=60)
     interface.register_task(tst_add, schedule=now-delta)
+    delta = datetime.timedelta(seconds=30)
     interface.register_task(tst_callable, schedule=now-delta, crontab="*")
     interface.register_task(tst_multiply, schedule=now+delta)
 
     # tst_callable() is on due:
-    task = interface.get_next_task(cron=True)
+    task = interface.get_next_task()
     assert task is not None
     assert task.function_name == tst_callable.__name__
 
-    # next call should return None because status has changed
-    task = interface.get_next_task(cron=True)
-    assert task is None
-
-    # there is still add() on due as delayed task:
+    # next call should return tst_add() which is not a cron task
     task = interface.get_next_task()
     assert task is not None
     assert task.function_name == tst_add.__name__
@@ -237,7 +234,7 @@ def test_get_next_crontask(interface):
     task = interface.get_next_task()
     assert task is None
 
-    # but there are still three entrie in the database
+    # but there are still three entries in the database
     num = interface.get_row_num(sql_interface.DB_TABLE_NAME_TASK)
     assert num == 3
 

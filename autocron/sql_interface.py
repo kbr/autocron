@@ -894,24 +894,29 @@ class SQLiteInterface:
             cursor = sql.run(CMD_GET_TASKS)
             return cursor.fetchall()
 
-    def get_next_task(self, cron=False):
+    def get_next_task(self, prefer_cron=True):
         """
-        Returns the next task on due in waiting state or None. If `cron`
-        is True returns only cron-tasks on due. If `cron` is False any
-        task on due may get returned (including cron). If not task is on
-        due return None. If a task is returned, the status is set to
-        TASK_STATUS_PROCESSING (and also updated in the database).
+        Returns the next task on due in waiting state or None. If
+        `prefer_cron` is True check for cron-tasks on due first. If
+        `prefer_cron` is False any task on due may get returned
+        (including cron). If no task is on due return None. If a task is
+        returned, the status is set to TASK_STATUS_PROCESSING (and also
+        updated in the database).
         """
-        # tuple with schedule as a single entry,
-        # because sql-command is qmark style
+        commands = []
+        if prefer_cron:
+            commands.append(CMD_GET_NEXT_CRONTASK)
+        commands.append(CMD_GET_NEXT_TASK)
         parameters = (datetime.datetime.now(),)
-        command = CMD_GET_NEXT_CRONTASK if cron else CMD_GET_NEXT_TASK
+
         with Executor(self.db_name, row_factory=task_row_factory) as sql:
-            cursor = sql.run(command, parameters)
-            task = cursor.fetchone()
-            if task is not None:
-                task.status = TASK_STATUS_PROCESSING
-                sql.run(CMD_UPDATE_TASK_STATUS, (task.status, task.rowid))
+            for command in commands:
+                cursor = sql.run(command, parameters)
+                task = cursor.fetchone()
+                if task:
+                    task.status = TASK_STATUS_PROCESSING
+                    sql.run(CMD_UPDATE_TASK_STATUS, (task.status, task.rowid))
+                    break
         return task
 
     def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
