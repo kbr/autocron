@@ -898,7 +898,9 @@ class SQLiteInterface:
         """
         Returns the next task on due in waiting state or None. If `cron`
         is True returns only cron-tasks on due. If `cron` is False any
-        task on due may get returned (including cron).
+        task on due may get returned (including cron). If not task is on
+        due return None. If a task is returned, the status is set to
+        TASK_STATUS_PROCESSING (and also updated in the database).
         """
         # tuple with schedule as a single entry,
         # because sql-command is qmark style
