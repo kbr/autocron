@@ -61,25 +61,25 @@ class Worker:
 
     def handle_tasks(self):
         """
-        Checks for tasks and process them. If there are no tasks to
+        Checks for a task on due and process the task. If there are no tasks to
         handle the method return `False` indicating that the main loop
-        can switch to idle state. If  tasks have been handled, the
+        can switch to idle state. If a task have been handled, the
         method return `True` to indicate that meanwhile more tasks may be
         waiting.
         """
-        tasks = self.interface.get_tasks_on_due(
-            status=sql_interface.TASK_STATUS_WAITING,
-            new_status=sql_interface.TASK_STATUS_PROCESSING
-        )
-        if tasks:
-            for task in tasks:
-                if self.active is False:
-                    # terminate as soon as possible
-                    return True
-                self.error_message = None
-                self.result = None
-                self.process_task(task)
-                self.postprocess_task(task)
+        # the call to get_next_task() prefer cron-tasks:
+        task = self.interface.get_next_task()
+        if task:
+            if self.active is False:
+                # don't process the task and terminate as soon as possible.
+                # crontasks will register on next start again and unhandled
+                # task will remain in the database and marked as waiting
+                # on next start to get handled again.
+                return True
+            self.error_message = None
+            self.result = None
+            self.process_task(task)
+            self.postprocess_task(task)
             return True
         return False
 
