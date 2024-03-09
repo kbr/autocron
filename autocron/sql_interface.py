@@ -912,12 +912,61 @@ class SQLiteInterface:
                 sql.run(CMD_UPDATE_TASK_STATUS, (task.status, task.rowid))
         return task
 
+    def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
+        """
+        Returns tasks on due as a list of HybridNamespace instances. If
+        'status' is given the status is also used for the selection. If
+        'new_status' is given the selection gets updated with the new
+        status.
+        """
+        if not schedule:
+            schedule = datetime.datetime.now()
+        if status:
+            command = CMD_GET_TASKS_ON_DUE_WITH_STATUS
+            parameters = (schedule, status)
+        else:
+            command = CMD_GET_TASKS_ON_DUE
+            parameters = (schedule,)
+        with Executor(self.db_name, row_factory=task_row_factory) as sql:
+            cursor = sql.run(command, parameters=parameters)
+            tasks = cursor.fetchall()
+            if tasks and new_status:
+                parameters = [(new_status, task.rowid) for task in tasks]
+                sql.run(CMD_UPDATE_TASK_STATUS, parameters=parameters, many=True)
+        # also update the status in the previous fetched tasks:
+        for task in tasks:
+            task.status = new_status
+        return tasks
+
     def delete_task(self, task):
         """
         Deletes the given task, which is a HybridNamespace object with
         """
         with Executor(self.db_name) as sql:
             sql.run(CMD_DELETE_TASK, (task.rowid,))
+
+    def get_crontasks(self):
+        """
+        Return all crontasks as a list of HybridNamespace instances.
+        """
+        with Executor(self.db_name, row_factory=task_row_factory) as sql:
+            cursor = sql.run(CMD_GET_CRONTASKS)
+            return cursor.fetchall()
+
+    def delete_crontasks(self):
+        """
+        Delete all crontasks from the task-table.
+        """
+        with Executor(self.db_name) as sql:
+            sql.run(CMD_DELETE_CRON_TASKS)
+
+    def update_task_schedule(self, task, schedule):
+        """
+        Update the schedule on a task. Usefull for crontasks.
+        """
+        with Executor(self.db_name) as sql:
+            parameters = schedule, TASK_STATUS_WAITING, task.rowid
+            sql.run(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
     def get_result_by_uuid(self, uuid):
         """
@@ -1038,39 +1087,39 @@ class SQLiteInterface:
 #         else:
 #             self._preregister_task(locals())
 
-    def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
-        """
-        Returns tasks on due as a list of HybridNamespace instances. If
-        'status' is given the status is also used for the selection. If
-        'new_status' is given the selection gets updated with the new
-        status.
-        """
-        if not schedule:
-            schedule = datetime.datetime.now()
-        if status:
-            cursor = self._execute(
-                CMD_GET_TASKS_ON_DUE_WITH_STATUS,
-                [schedule, status]
-            )
-        else:
-            cursor = self._execute(CMD_GET_TASKS_ON_DUE, [schedule])
-        tasks = self._fetch_all_callable_entries(cursor)
-        if new_status and tasks:
-            values = [(new_status, task.rowid) for task in tasks]
-            self._execute(CMD_UPDATE_TASK_STATUS, values, many=True)
-            # also update the status in the previous fetched tasks:
-            for task in tasks:
-                task.status = new_status
-        return tasks
+#     def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
+#         """
+#         Returns tasks on due as a list of HybridNamespace instances. If
+#         'status' is given the status is also used for the selection. If
+#         'new_status' is given the selection gets updated with the new
+#         status.
+#         """
+#         if not schedule:
+#             schedule = datetime.datetime.now()
+#         if status:
+#             cursor = self._execute(
+#                 CMD_GET_TASKS_ON_DUE_WITH_STATUS,
+#                 [schedule, status]
+#             )
+#         else:
+#             cursor = self._execute(CMD_GET_TASKS_ON_DUE, [schedule])
+#         tasks = self._fetch_all_callable_entries(cursor)
+#         if new_status and tasks:
+#             values = [(new_status, task.rowid) for task in tasks]
+#             self._execute(CMD_UPDATE_TASK_STATUS, values, many=True)
+#             # also update the status in the previous fetched tasks:
+#             for task in tasks:
+#                 task.status = new_status
+#         return tasks
 
-    def get_tasks_by_signature(self, func):
-        """
-        Return all tasks matching the function-signature as a list of
-        HybridNamespace instances.
-        """
-        parameters = func.__module__, func.__name__
-        cursor = self._execute(CMD_GET_TASKS_BY_NAME, parameters)
-        return self._fetch_all_callable_entries(cursor)
+#     def get_tasks_by_signature(self, func):
+#         """
+#         Return all tasks matching the function-signature as a list of
+#         HybridNamespace instances.
+#         """
+#         parameters = func.__module__, func.__name__
+#         cursor = self._execute(CMD_GET_TASKS_BY_NAME, parameters)
+#         return self._fetch_all_callable_entries(cursor)
 
 #     def delete_callable(self, entry):
 #         """
@@ -1080,27 +1129,27 @@ class SQLiteInterface:
 #         """
 #         self._execute(CMD_DELETE_TASK, [entry["rowid"]])
 
-    def get_crontasks(self):
-        """
-        Return all crontasks as a list of HybridNamespace instances.
-        """
-        cursor = self._execute(CMD_GET_CRONTASKS)
-        return self._fetch_all_callable_entries(cursor)
+#     def get_crontasks(self):
+#         """
+#         Return all crontasks as a list of HybridNamespace instances.
+#         """
+#         cursor = self._execute(CMD_GET_CRONTASKS)
+#         return self._fetch_all_callable_entries(cursor)
 
-    def delete_cronjobs(self):
-        """
-        Delete all cronjobs from the task-table.
-        """
-        self._execute(CMD_DELETE_CRON_TASKS)
+#     def delete_cronjobs(self):
+#         """
+#         Delete all cronjobs from the task-table.
+#         """
+#         self._execute(CMD_DELETE_CRON_TASKS)
 
-    def update_task_schedule(self, task, schedule):
-        """
-        Updates the schedule entry of the given task. The task must
-        already be in the database with a defined rowid. Doing a
-        schedule update also set the task-state to WAITING.
-        """
-        parameters = schedule, TASK_STATUS_WAITING, task.rowid
-        self._execute(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
+#     def update_task_schedule(self, task, schedule):
+#         """
+#         Updates the schedule entry of the given task. The task must
+#         already be in the database with a defined rowid. Doing a
+#         schedule update also set the task-state to WAITING.
+#         """
+#         parameters = schedule, TASK_STATUS_WAITING, task.rowid
+#         self._execute(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
 
     # -- result-methods ---
@@ -1112,42 +1161,42 @@ class SQLiteInterface:
 #         """
 #         return datetime.datetime.now() + self._result_ttl
 
-    def register_result(
-            self,
-            func,
-            uuid,
-            args=(),
-            status=TASK_STATUS_WAITING,
-            kwargs=None,
-        ):
-        """
-        Register an entry in the result table of the database. The entry
-        stores the uuid and the status `False` as zero `0` because the
-        task is pending and no result available jet.
-        """
-        if not kwargs:
-            kwargs = {}
-        arguments = pickle.dumps((args, kwargs))
-        data = {
-            "uuid": uuid,
-            "status": status,
-            "function_module": func.__module__,
-            "function_name": func.__name__,
-            "function_arguments": arguments,
-            "function_result": pickle.dumps(None),
-            "error_message": "",
-            "ttl": self.result_ttl,
-        }
-        self._execute(CMD_STORE_RESULT, data)
-
-    def get_results(self):
-        """
-        Generic method to return all results as a list of TaskResult
-        instances.
-        """
-        with Executor(self.db_name, row_factory=result_row_factory) as sql:
-            cursor = sql.run(CMD_GET_RESULTS)
-            return cursor.fetchall()
+#     def register_result(
+#             self,
+#             func,
+#             uuid,
+#             args=(),
+#             status=TASK_STATUS_WAITING,
+#             kwargs=None,
+#         ):
+#         """
+#         Register an entry in the result table of the database. The entry
+#         stores the uuid and the status `False` as zero `0` because the
+#         task is pending and no result available jet.
+#         """
+#         if not kwargs:
+#             kwargs = {}
+#         arguments = pickle.dumps((args, kwargs))
+#         data = {
+#             "uuid": uuid,
+#             "status": status,
+#             "function_module": func.__module__,
+#             "function_name": func.__name__,
+#             "function_arguments": arguments,
+#             "function_result": pickle.dumps(None),
+#             "error_message": "",
+#             "ttl": self.result_ttl,
+#         }
+#         self._execute(CMD_STORE_RESULT, data)
+#
+#     def get_results(self):
+#         """
+#         Generic method to return all results as a list of TaskResult
+#         instances.
+#         """
+#         with Executor(self.db_name, row_factory=result_row_factory) as sql:
+#             cursor = sql.run(CMD_GET_RESULTS)
+#             return cursor.fetchall()
 
 
 #     def get_result_by_uuid(self, uuid):

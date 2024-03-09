@@ -312,6 +312,20 @@ def test_delete_task(interface):
     assert interface.count_tasks() == 0
 
 
+def test_update_task_schedule(interface):
+    """
+    Update the schedule on a task.
+    """
+    now = datetime.datetime.now()
+    interface.register_task(tst_multiply, schedule=now)
+    task = interface.get_tasks()[0]
+    assert task.schedule == now
+
+    then = now + datetime.timedelta(seconds=30)
+    interface.update_task_schedule(task, then)
+    task = interface.get_tasks()[0]
+    assert task.schedule == then
+
 
 
 

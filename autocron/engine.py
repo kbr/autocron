@@ -169,7 +169,7 @@ class Engine:
             settings.running_workers = 0
             settings.worker_pids = ""
             self.interface.set_settings(settings)
-            self.interface.delete_cronjobs()
+            self.interface.delete_crontasks()
         # also stop the interface write-thread
         self.interface.stop_write_thread()
 

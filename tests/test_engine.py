@@ -21,7 +21,13 @@ TEST_DB_NAME = "test.db"
 
 # all labels starting with 'tst_' are test-functions:
 
+def tst_add():
+    pass
+
 def tst_cron():
+    pass
+
+def tst_cron2():
     pass
 
 
@@ -95,16 +101,22 @@ def test_delete_crontasks_on_shutdown(interface):
     """
     interface.init_database(db_name=TEST_DB_NAME)
 
-    # put a crontask in the database:
+    # put two crontasks and a normal task in the database:
+    interface.register_task(tst_add)
     interface.register_task(tst_cron, crontab="* * * * *")
-    tasks = interface.get_tasks_by_signature(tst_cron)
-    assert bool(tasks) is True  # entry in list
+    interface.register_task(tst_cron2, crontab="* * * * *")
+    entries = interface.count_tasks()
+    assert entries == 3
 
     # simulate an engine in running mode and stop it:
     engine_ = engine.Engine(interface=interface)
     engine_.monitor_thread = True
     engine_.stop()
 
-    # the crontask should now be deleted:
-    tasks = interface.get_tasks_by_signature(tst_cron)
-    assert bool(tasks) is False  # no entry in list
+    # the crontasks should now be deleted:
+    entries = interface.count_tasks()
+    assert entries == 1
+
+    # and the remaining task should be the add-task:
+    task = interface.get_tasks()[0]
+    assert bool(task.crontab) is False

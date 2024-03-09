@@ -75,8 +75,8 @@ def test_cron_with_default_crontab(interface):
     func = wrapper(tst_cron)
     assert func == tst_cron
 
-    # the cron.wrapper() has registered the callable in the database
-    entries = interface.get_tasks_by_signature(tst_cron)
+    # the cron.wrapper() has registered the task in the database
+    entries = interface.get_tasks()
     assert len(entries) == 1
 
     # crontab has the default value
@@ -98,8 +98,8 @@ def test_suppress_identic_cronjobs(interface):
     """
     interface.register_task(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
     interface.register_task(tst_cron, crontab=decorators.DEFAULT_CRONTAB)
-    entries = interface.get_tasks_by_signature(tst_cron)
-    assert len(entries) == 2
+    entries = interface.count_tasks()
+    assert entries == 2
 
     # add same callable again by means of cron() providing a different
     # crontab for identification
@@ -108,9 +108,10 @@ def test_suppress_identic_cronjobs(interface):
 
     # just a single entry should now be in the database
     # and should have the crontab "10 2 1 * *"
-    entries = interface.get_tasks_by_signature(tst_cron)
-    assert len(entries) == 1
-    assert entries[0].crontab == crontab
+    entries = interface.count_tasks()
+    assert entries == 1
+    task = interface.get_tasks()[0]
+    assert task.crontab == crontab
 
 
 @pytest.mark.parametrize(
@@ -181,7 +182,7 @@ def test_handle_registered_task(interface):
     assert interface.count_results() == 1
 
     # let the worker handle the task:
-    # the return_value is true if the worker has handles at least one task.
+    # the return_value is true if the worker has handled at least one task.
     worker_ = worker.Worker(interface.db_name)
     return_value = worker_.handle_tasks()
     assert return_value is True
