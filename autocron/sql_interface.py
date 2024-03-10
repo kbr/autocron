@@ -129,8 +129,6 @@ CMD_UPDATE_RESULT = f"""
         error_message = ?,
         ttl = ?
     WHERE uuid == ?"""
-# CMD_DELETE_RESULT = f"""\
-#     DELETE FROM {DB_TABLE_NAME_RESULT} WHERE uuid == ?"""
 CMD_DELETE_OUTDATED_RESULTS = f"""
     DELETE FROM {DB_TABLE_NAME_RESULT}
     WHERE status == {TASK_STATUS_READY} AND ttl <= ?"""
