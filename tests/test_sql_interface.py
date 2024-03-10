@@ -500,3 +500,26 @@ def test_task_result(func, args, kwargs, expected_result):
         func, *args, **kwargs
     )
     assert tr.result == expected_result
+
+
+def test_get_results(interface):
+    """
+    Check to get a list of all results in TASK_STATUS_READY as a list of
+    TaskResult instances.
+    """
+    # register two tasks with results in TASK_STATUS_READY state
+    result_functions = (tst_callable, tst_add)
+    for func in result_functions:
+        _uuid = uuid.uuid4().hex
+        interface.register_task(func, uuid=_uuid)
+        interface.update_result(_uuid)
+    # and one task with result status TASK_STATUS_WAITING
+    interface.register_task(tst_multiply, uuid=uuid.uuid4().hex)
+
+    # get the 'ready' results which should be the ones for
+    # tst_callable and tst_add
+    results = interface.get_results()
+    assert len(results) == len(result_functions)
+    result_function_names = [result.function_name for result in results]
+    for func in result_functions:
+        assert func.__name__ in result_function_names

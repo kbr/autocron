@@ -117,7 +117,8 @@ RESULT_COLUMN_SEQUENCE =\
     "rowid,uuid,status,function_module,function_name,"\
     "function_arguments,function_result,error_message, ttl"
 CMD_GET_RESULTS = f"""
-    SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}"""
+    SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}
+    WHERE status == {TASK_STATUS_READY}"""
 CMD_GET_RESULT_BY_UUID = f"""
     SELECT {RESULT_COLUMN_SEQUENCE} FROM {DB_TABLE_NAME_RESULT}
     WHERE uuid == ?"""
@@ -813,6 +814,15 @@ class SQLiteInterface:
         with Executor(self.db_name, row_factory=result_row_factory) as sql:
             cursor = sql.run(CMD_GET_RESULT_BY_UUID, (uuid,))
             return cursor.fetchone()  # tuple of data or None
+
+    def get_results(self):
+        """
+        Get of all results with status TASK_STATUS_READY as a list of
+        TaskResult instances.
+        """
+        with Executor(self.db_name, row_factory=result_row_factory) as sql:
+            cursor = sql.run(CMD_GET_RESULTS)
+            return cursor.fetchall()
 
     def update_result(self, uuid, result=None, error_message=""):
         """
