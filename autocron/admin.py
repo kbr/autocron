@@ -186,11 +186,7 @@ def delete_database():
     answer = input("Sure to delete the current database? [y/n]: ")
     if answer.lower() == 'y':
         interface.db_name.unlink()
-        # this could be all, because at the next autocron import
-        # a new database will get created.
-        # However, create a new database here and now:
-        # pylint: disable=protected-access
-        interface._init_database()
+        interface.db_name = None
     else:
         print("abort command")
 

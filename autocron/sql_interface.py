@@ -397,7 +397,7 @@ def result_row_factory(cursor, row):
     TaskResult instance.
     """
     column_names = [entry[0] for entry in cursor.description]
-    data = {name: value for name, value in zip(column_names, row)}
+    data = dict(zip(column_names, row))
     result = TaskResult(data)
     result.function_result = pickle.loads(result.function_result)
     result.function_arguments = pickle.loads(result.function_arguments)
@@ -459,12 +459,15 @@ def run_write_thread(exit_event, db_name, command_queue):
             _execute_sqlite_command(db_name, cmd, parameters, many)
 
 
-# pylint: disable=too-many-public-methods
 class SQLiteInterface:
     """
     SQLite interface for application specific operations.
     This class is a Singleton.
     """
+    # (this is not a god-class but a bit bigger than pylint likes it)
+    # pylint: disable=too-many-public-methods
+    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-arguments
 
     _instance = None
 
@@ -535,30 +538,6 @@ class SQLiteInterface:
         Returns the new ttl as a datetime instance with an offset of now.
         """
         return datetime.datetime.now() + self._result_ttl
-
-    def _execute(self, cmd, parameters=(), many=False):
-        """
-        Run a command with parameters. This is a wrapper for the
-        blocking _execute_sqlite_command() that gets executed in a
-        separate thread after autocron has run the start-up phase and
-        the engine has started the worker-monitor and the write-thread.
-        """
-        if self._db_name is None:
-            raise IOError("No autocron database defined.")
-
-        if self.write_thread and cmd in (CMD_STORE_TASK, CMD_STORE_RESULT):
-            # delegate blocking I/O to the write_thread
-            # the both commands are the ones used by register_callable()
-            # this way the delay() decorator is non-blocking at runtime.
-            data = cmd, parameters, many
-            self.command_queue.put(data)
-        else:
-            # do it in blocking mode. This can happen on start up
-            # before the writer thread has started.
-            # This will also happen from running the admin or the worker-
-            # process, because in both cases the engine starting the
-            # write_thread is not involved.
-            return _execute_sqlite_command(self._db_name, cmd, parameters, many)
 
     def _preregister_task(self, data):
         """
