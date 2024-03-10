@@ -12,6 +12,7 @@ import time
 
 from autocron.schedule import CronScheduler
 from autocron import sql_interface
+from autocron.sql_interface import sqlite_call_wrapper
 
 
 WORKER_IDLE_TIME = 4.0  # seconds
@@ -68,7 +69,8 @@ class Worker:
         waiting.
         """
         # the call to get_next_task() prefer cron-tasks:
-        task = self.interface.get_next_task()
+#         task = self.interface.get_next_task()
+        task = sqlite_call_wrapper(self.interface.get_next_task)
         if task:
             if self.active is False:
                 # don't process the task and terminate as soon as possible.
