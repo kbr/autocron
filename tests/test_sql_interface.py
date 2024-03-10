@@ -324,8 +324,46 @@ def test_update_task_schedule(interface):
     assert task.schedule == then
 
 
+def test_get_result_by_uuid(interface):
+    """
+    Check for a result entry in the database after registering a task.
+    """
+    uid = uuid.uuid4().hex
+    func = tst_callable
+    args = (42, 3.141)
+    kwargs = {"a": 100, "b": "test"}
+    data = {"args": args, "kwargs": kwargs, "uuid": uid}
+    interface.register_task(func, **data)
+    result = interface.get_result_by_uuid(uuid=uid)
+    assert result.function_name == func.__name__
+    assert result.function_arguments == (args, kwargs)
+    assert result.is_waiting is True
+    assert result.is_ready is False
 
 
+def test_update_result(interface):
+    """
+    Register a task with a waiting result. Update the result and check
+    for the changed result-entry in the database.
+    """
+    # prepare task
+    uid = uuid.uuid4().hex
+    func = tst_callable
+    data = {"uuid": uid}
+    interface.register_task(func, **data)
+
+    # check pending result
+    result = interface.get_result_by_uuid(uuid=uid)
+    assert result.is_waiting is True
+
+    # check for delayed result storage
+    calculated_result = 42
+    interface.update_result(uid, result=calculated_result)
+    result = interface.get_result_by_uuid(uuid=uid)
+    assert result.is_waiting is False
+    assert result.is_ready is True
+    assert result.has_error is False
+    assert result.result == calculated_result
 
 
 
@@ -445,34 +483,61 @@ def test_update_task_schedule(interface):
 #     assert result.has_error is True
 
 
-# def test_delete_outdated_result(interface):
-#     """
-#     Store two results in TASK_STATUS_READY state, one of them outdated.
-#     After deletion of outdated results just one result should survive.
-#     """
-#     status=sql_interface.TASK_STATUS_READY
-#     uuid_ = uuid.uuid4().hex
-#     interface.register_result(tst_callable, uuid_, status=status)
-#
-#     # now register the outdated result
-#     # setting the interface.result_ttl to a timedelta of zero
-#     interface._result_ttl = datetime.timedelta()
-#     interface.register_result(tst_add, uuid.uuid4().hex, status=status)
-#
-#     # now there are two result entries in the database:
-#     entries = interface.count_results()
-#     assert entries == 2
-#
-#     # after deletion of the outdated result just one result
-#     # should be stored:
-#     interface.delete_outdated_results()
-#     entries = interface.count_results()
-#     assert entries == 1
-#
-#     # and this should be the one for the tst_callable() function:
-#     entry = interface.get_result_by_uuid(uuid_)
-#     assert entry.function_module == tst_callable.__module__
-#     assert entry.function_name == tst_callable.__name__
+def test_delete_outdated_result(interface):
+    """
+    Store two results in TASK_STATUS_READY state, one of them outdated.
+    After deletion of outdated results just one result should survive.
+    """
+    # register not outdated result and update result to change
+    # status to TASK_STATUS_READY
+    result = 42
+    uuid_ = uuid.uuid4().hex
+    interface.register_task(tst_callable, uuid=uuid_)
+    interface.update_result(uuid_, result=result)
+
+    # now register the outdated result
+    # setting the interface.result_ttl to a timedelta of zero
+    interface._result_ttl = datetime.timedelta()
+    _uuid = uuid.uuid4().hex
+    interface.register_task(tst_add, uuid=_uuid)
+    interface.update_result(_uuid, result=32)
+
+    # now there are two result entries in the database:
+    entries = interface.count_results()
+    assert entries == 2
+
+    # after deletion of the outdated result just one result
+    # should be stored:
+    interface.delete_outdated_results()
+    entries = interface.count_results()
+    assert entries == 1
+
+    # and this should be the one for the tst_callable() function:
+    entry = interface.get_result_by_uuid(uuid_)
+    assert entry.result == result
+
+
+def test_delete_crontask(interface):
+    """
+    Delete crontasks from the database but keep other tasks.
+    """
+    # register three tasks, two of them are callables
+    interface.register_task(tst_callable, uuid=uuid.uuid4().hex)
+    interface.register_task(tst_add, crontab="* * * * *")
+    interface.register_task(tst_multiply, crontab="* * * * *")
+    entries = interface.count_tasks()
+    assert entries == 3
+
+    # now delete the cronjobs:
+    interface.delete_crontasks()
+    entries = interface.count_tasks()
+    assert entries == 1
+
+    # the remaining task should be the tst_callable() function:
+    task = interface.get_tasks()[0]
+    assert task.function_module == tst_callable.__module__
+    assert task.function_name == tst_callable.__name__
+
 
 
 # def test_delete_cronjobs(interface):

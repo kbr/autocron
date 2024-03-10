@@ -1007,45 +1007,45 @@ class SQLiteInterface:
 
     # -- task-methods ---
 
-    @staticmethod
-    def _fetch_all_callable_entries(cursor):
-        """
-        Internal function to iterate over a selection of entries and unpack
-        the columns to a dictionary with the following key-value pairs:
-
-            {
-                "rowid": integer,
-                "uuid": string,
-                "schedule": datetime,
-                "status": integer,
-                "crontab": string,
-                "function_module": string,
-                "function_name": string,
-                "args": tuple(of original datatypes),
-                "kwargs": dict(of original datatypes),
-            }
-
-        Returns a list of HybridNamespace instances or an empty list if
-        a selection does not match any row.
-        """
-        def process(row):
-            """
-            Gets a `row` and returns a dictionary with Python datatypes.
-            `row` is an ordered tuple of columns as defined in `CREATE
-            TABLE`. The blob column with the pickled arguments is the
-            last column.
-            """
-            args, kwargs = pickle.loads(row[-1])
-            data = {
-                key: row[i] for i, key in enumerate(
-                    TASK_COLUMN_SEQUENCE.strip().split(",")[:-1]
-                )
-            }
-            data["args"] = args
-            data["kwargs"] = kwargs
-            return HybridNamespace(data)
-
-        return [process(row) for row in cursor.fetchall()]
+#     @staticmethod
+#     def _fetch_all_callable_entries(cursor):
+#         """
+#         Internal function to iterate over a selection of entries and unpack
+#         the columns to a dictionary with the following key-value pairs:
+#
+#             {
+#                 "rowid": integer,
+#                 "uuid": string,
+#                 "schedule": datetime,
+#                 "status": integer,
+#                 "crontab": string,
+#                 "function_module": string,
+#                 "function_name": string,
+#                 "args": tuple(of original datatypes),
+#                 "kwargs": dict(of original datatypes),
+#             }
+#
+#         Returns a list of HybridNamespace instances or an empty list if
+#         a selection does not match any row.
+#         """
+#         def process(row):
+#             """
+#             Gets a `row` and returns a dictionary with Python datatypes.
+#             `row` is an ordered tuple of columns as defined in `CREATE
+#             TABLE`. The blob column with the pickled arguments is the
+#             last column.
+#             """
+#             args, kwargs = pickle.loads(row[-1])
+#             data = {
+#                 key: row[i] for i, key in enumerate(
+#                     TASK_COLUMN_SEQUENCE.strip().split(",")[:-1]
+#                 )
+#             }
+#             data["args"] = args
+#             data["kwargs"] = kwargs
+#             return HybridNamespace(data)
+#
+#         return [process(row) for row in cursor.fetchall()]
 
     # pylint: disable=too-many-arguments
 
