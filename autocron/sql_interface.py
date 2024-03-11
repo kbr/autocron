@@ -341,7 +341,7 @@ class TaskResult(HybridNamespace):
     @classmethod
     def from_function_call(cls, func, *args, **kwargs):
         """
-        Renturns a new TaskResult-Instance with the result from the
+        Returns a new TaskResult-Instance with the result from the
         given function executed with the given arguments. This exists
         for type consistency to return a TaskResult from delay-decorated
         functions even if autotask is inactive.
@@ -498,6 +498,7 @@ class SQLiteInterface:
     # pylint: disable=too-many-arguments
 
     _instance = None
+    _is_initialized = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -505,6 +506,8 @@ class SQLiteInterface:
         return cls._instance
 
     def __init__(self):
+        if self._is_initialized:
+            return
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(seconds=DEFAULT_RESULT_TTL)
         self._accept_registrations = True
@@ -513,6 +516,7 @@ class SQLiteInterface:
         self.command_queue = None
         self.write_thread = None
         self.exit_event = None
+        self.__class__._is_initialized = True
 
     @property
     def db_name(self):
