@@ -56,7 +56,7 @@ class Worker:
         while self.active:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
-                self.interface.delete_outdated_results()
+                sqlite_call_wrapper(self.interface.delete_outdated_results)
                 time.sleep(self.interface.get_worker_idle_time())
         self.interface.decrement_running_workers(pid)
 
@@ -114,7 +114,8 @@ class Worker:
         """
         if task.uuid:
             # if the task has a uuid, store the result / error-message
-            self.interface.update_result(
+            sqlite_call_wrapper(
+                self.interface.update_result,
                 uuid=task.uuid,
                 result=self.result,
                 error_message=self.error_message
@@ -124,10 +125,12 @@ class Worker:
             # and update the task-entry
             scheduler = CronScheduler(crontab=task.crontab)
             schedule = scheduler.get_next_schedule()
-            self.interface.update_task_schedule(task, schedule)
+            sqlite_call_wrapper(
+                self.interface.update_task_schedule, task, schedule
+            )
         else:
             # not a cronjob: delete the task from the db
-            self.interface.delete_task(task)
+            sqlite_call_wrapper(self.interface.delete_task, task)
 
 
 def start_worker():

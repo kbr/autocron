@@ -206,6 +206,9 @@ CMD_SETTINGS_UPDATE = f"""
         result_ttl = ?
     WHERE rowid == ?"""
 
+# exclusive access for transactions:
+CMD_EXCLUSIVE = "BEGIN EXCLUSIVE"
+
 
 # sqlite3 default adapters and converters deprecated as of Python 3.12:
 
@@ -348,10 +351,11 @@ class Executor:
     connected. Leaving the context will close the database connection.
     """
 
-    def __init__(self, db_name, row_factory=None):
+    def __init__(self, db_name, row_factory=None, exclusive=False):
         self.row_factory = row_factory
         self.db_name = db_name
         self.connection = None
+        self.exclusive = exclusive
 
     def __enter__(self):
         self.connection = sqlite3.connect(
@@ -360,6 +364,8 @@ class Executor:
         )
         if self.row_factory:
             self.connection.row_factory = self.row_factory
+        if self.exclusive:
+            self.connection.execute(CMD_EXCLUSIVE)
         return self
 
     def __exit__(self, *args):
@@ -435,36 +441,15 @@ def settings_row_factory(cursor, row):
     return HybridNamespace(data)
 
 
-def _execute_sqlite_command(db_name, command, parameters=(), many=False):
-    """
-    Run a command with parameters. Parameters can be a sequence of
-    values to get used in an ordered way or a dictionary with
-    key-value pairs, where the keys are the value-names used in the
-    db (i.e. the column names).
-
-    If 'many' is true then conn.executemany() gets called and
-    parameters is interpreted differently as as sequence of ordered
-    tuples or dictionaries as placeholders for the provided command.
-
-    This is a blocking operation: the sqlite library will lock the
-    database per process when writing to the database and each process
-    will wait for the lock to be released to get their turn.
-    """
-    conn = sqlite3.connect(
-        db_name,
-        detect_types=sqlite3.PARSE_DECLTYPES
-    )
-    with conn:
-        if many:
-            return conn.executemany(command, parameters)
-        return conn.execute(command, parameters)
-
-
 def run_write_thread(exit_event, db_name, command_queue):
     """
     Start the write thread to delegate the blocking I/O out of the main
     process, that may run by an async framework.
     """
+    def writer(command, parameters, many):
+        with Executor(db_name) as sql:
+            sql.run(command, parameters=parameters, many=many)
+
     while True:
         try:
             item = command_queue.get(timeout=WRITE_THREAD_TIMEOUT)
@@ -475,8 +460,8 @@ def run_write_thread(exit_event, db_name, command_queue):
                 break
         else:
             # item is a sequence of arguments
-            cmd, parameters, many = item
-            _execute_sqlite_command(db_name, cmd, parameters, many)
+            command, parameters, many = item
+            sqlite_call_wrapper(writer, command, parameters, many)
 
 
 class SQLiteInterface:
@@ -737,7 +722,11 @@ class SQLiteInterface:
         commands.append(CMD_GET_NEXT_TASK)
         parameters = (datetime.datetime.now(),)
 
-        with Executor(self.db_name, row_factory=task_row_factory) as sql:
+        with Executor(
+            self.db_name,
+            row_factory=task_row_factory,
+            exclusive=True
+        ) as sql:
             for command in commands:
                 cursor = sql.run(command, parameters)
                 task = cursor.fetchone()
@@ -778,7 +767,8 @@ class SQLiteInterface:
 
     def delete_task(self, task):
         """
-        Deletes the given task, which is a HybridNamespace object with
+        Deletes the given task, which is a HybridNamespace object with a
+        rowid attribute.
         """
         with Executor(self.db_name) as sql:
             sql.run(CMD_DELETE_TASK, (task.rowid,))
