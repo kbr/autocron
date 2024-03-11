@@ -68,8 +68,6 @@ class Worker:
         method return `True` to indicate that meanwhile more tasks may be
         waiting.
         """
-        # the call to get_next_task() prefer cron-tasks:
-#         task = self.interface.get_next_task()
         task = sqlite_call_wrapper(self.interface.get_next_task)
         if task:
             if self.active is False:

@@ -229,26 +229,22 @@ sqlite3.register_adapter(datetime.datetime, datetime_adapter)
 sqlite3.register_converter("datetime", datetime_converter)
 
 
-def sqlite_call_wrapper(
-    function,
-    parameters=(),
-    retries=SQLITE_MAX_RETRY_LIMIT,
-    delay=SQLITE_OPERATIONAL_ERROR_DELAY
-):
+def sqlite_call_wrapper(function, *args, **kwargs):
     """
     Helper function as wrapper for sqlite actions that may fail, i.e.
     because of a database lock. These functions are most often called
     from a worker to update status or results or by the decorator for
-    registering. Therefor the blocking operation and sleep time does not
-    affect the application that should not block.
+    registering, where the registering happens in a seperate thrtead.
+    Therefor the blocking operation and sleep time does not affect the
+    application that should not block.
     """
     message = ""
-    for _ in range(retries):
+    for _ in range(SQLITE_MAX_RETRY_LIMIT):
         try:
-            return function(*parameters)
+            return function(*args, **kwargs)
         except sqlite3.OperationalError as err:
             message = str(err)
-            time.sleep(delay)
+            time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
     raise sqlite3.OperationalError(message)
 
 
