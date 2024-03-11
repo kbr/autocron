@@ -232,23 +232,46 @@ sqlite3.register_adapter(datetime.datetime, datetime_adapter)
 sqlite3.register_converter("datetime", datetime_converter)
 
 
-def sqlite_call_wrapper(function, *args, **kwargs):
+# def sqlite_call_wrapper(function, *args, **kwargs):
+#     """
+#     Helper function as wrapper for sqlite actions that may fail, i.e.
+#     because of a database lock. These functions are most often called
+#     from a worker to update status or results or by the decorator for
+#     registering, where the registering happens in a seperate thrtead.
+#     Therefor the blocking operation and sleep time does not affect the
+#     application that should not block.
+#     """
+#     message = ""
+#     for _ in range(SQLITE_MAX_RETRY_LIMIT):
+#         try:
+#             return function(*args, **kwargs)
+#         except sqlite3.OperationalError as err:
+#             message = str(err)
+#             time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
+#     raise sqlite3.OperationalError(message)
+
+
+def db_access(function):
     """
-    Helper function as wrapper for sqlite actions that may fail, i.e.
-    because of a database lock. These functions are most often called
-    from a worker to update status or results or by the decorator for
-    registering, where the registering happens in a seperate thrtead.
-    Therefor the blocking operation and sleep time does not affect the
-    application that should not block.
+    Access decorator. Repeats the decorated function several times in
+    case the database is locked because of write- or exclusive-access.
     """
-    message = ""
-    for _ in range(SQLITE_MAX_RETRY_LIMIT):
-        try:
-            return function(*args, **kwargs)
-        except sqlite3.OperationalError as err:
-            message = str(err)
-            time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
-    raise sqlite3.OperationalError(message)
+    def wrapper(*args, **kwargs):
+        """
+        Repeat the wrapped function call in case of an OperationalError.
+        If this fails for SQLITE_MAX_RETRY_LIMIT times, the original
+        error is raised.
+        """
+        message = ""
+        for _ in range(SQLITE_MAX_RETRY_LIMIT):
+            try:
+                return function(*args, **kwargs)
+            except sqlite3.OperationalError as err:
+                message = str(err)
+                time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
+        raise sqlite3.OperationalError(message)
+
+    return wrapper
 
 
 # pylint does not like instances with dynamic attributes:
@@ -553,6 +576,7 @@ class SQLiteInterface:
         data = {k: v for k, v in data.items() if k != "self"}
         self._preregistered_tasks.append(data)
 
+    @db_access
     def init_database(self, db_name):
         """
         Callable for delayed initialization. Set the database
@@ -563,7 +587,7 @@ class SQLiteInterface:
         if not self.is_initialized:
             self.db_name = db_name
 
-            with Executor(self.db_name) as sql:
+            with Executor(self.db_name, exclusive=True) as sql:
                 # create tables (if not existing)
                 sql.run(CMD_CREATE_TASK_TABLE)
                 sql.run(CMD_CREATE_RESULT_TABLE)
@@ -627,6 +651,7 @@ class SQLiteInterface:
 
     # -- database api ---
 
+    @db_access
     def get_row_num(self, table_name):
         """
         Return the number of entries in the given table.
@@ -636,6 +661,7 @@ class SQLiteInterface:
             cursor = sql.run(cmd)
             return cursor.fetchone()[0]
 
+    @db_access
     def count_tasks(self):
         """
         Returns the number of rows in the task-table, therefore
@@ -643,6 +669,7 @@ class SQLiteInterface:
         """
         return self.get_row_num(DB_TABLE_NAME_TASK)
 
+    @db_access
     def count_results(self):
         """
         Returns the number of rows in the task-table, therefore
@@ -650,6 +677,7 @@ class SQLiteInterface:
         """
         return self.get_row_num(DB_TABLE_NAME_RESULT)
 
+    @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
                       args=None, kwargs=None, unique=False):
         """
@@ -677,7 +705,11 @@ class SQLiteInterface:
                 "function_arguments": arguments,
             }
 
-            with Executor(self._db_name, row_factory=task_row_factory) as sql:
+            with Executor(
+                self._db_name,
+                row_factory=task_row_factory,
+                exclusive=True
+            ) as sql:
                 if unique:
                     parameters = (func.__module__, func.__name__)
                     cursor = sql.run(CMD_GET_TASKS_BY_NAME, parameters)
@@ -698,6 +730,7 @@ class SQLiteInterface:
                     }
                     sql.run(CMD_STORE_RESULT, result_data)
 
+    @db_access
     def get_tasks(self):
         """
         Generic method to return all tasks as a list of HybridNamespace
@@ -707,6 +740,7 @@ class SQLiteInterface:
             cursor = sql.run(CMD_GET_TASKS)
             return cursor.fetchall()
 
+    @db_access
     def get_next_task(self, prefer_cron=True):
         """
         Returns the next task on due in waiting state or None. If
@@ -736,6 +770,7 @@ class SQLiteInterface:
                     break
         return task
 
+    @db_access
     def get_tasks_on_due(self, schedule=None, status=None, new_status=None):
         """
         Returns tasks on due as a list of HybridNamespace instances. If
@@ -765,6 +800,7 @@ class SQLiteInterface:
             task.status = new_status
         return tasks
 
+    @db_access
     def delete_task(self, task):
         """
         Deletes the given task, which is a HybridNamespace object with a
@@ -773,6 +809,7 @@ class SQLiteInterface:
         with Executor(self.db_name) as sql:
             sql.run(CMD_DELETE_TASK, (task.rowid,))
 
+    @db_access
     def get_crontasks(self):
         """
         Return all crontasks as a list of HybridNamespace instances.
@@ -781,6 +818,7 @@ class SQLiteInterface:
             cursor = sql.run(CMD_GET_CRONTASKS)
             return cursor.fetchall()
 
+    @db_access
     def delete_crontasks(self):
         """
         Delete all crontasks from the task-table.
@@ -788,6 +826,7 @@ class SQLiteInterface:
         with Executor(self.db_name) as sql:
             sql.run(CMD_DELETE_CRON_TASKS)
 
+    @db_access
     def update_task_schedule(self, task, schedule):
         """
         Update the schedule on a task. Usefull for crontasks.
@@ -796,6 +835,7 @@ class SQLiteInterface:
             parameters = schedule, TASK_STATUS_WAITING, task.rowid
             sql.run(CMD_UPDATE_CRONTASK_SCHEDULE, parameters)
 
+    @db_access
     def get_result_by_uuid(self, uuid):
         """
         Return a dataset (as TaskResult) or None.
@@ -804,6 +844,7 @@ class SQLiteInterface:
             cursor = sql.run(CMD_GET_RESULT_BY_UUID, (uuid,))
             return cursor.fetchone()  # tuple of data or None
 
+    @db_access
     def get_results(self):
         """
         Get of all results with status TASK_STATUS_READY as a list of
@@ -813,6 +854,7 @@ class SQLiteInterface:
             cursor = sql.run(CMD_GET_RESULTS)
             return cursor.fetchall()
 
+    @db_access
     def update_result(self, uuid, result=None, error_message=""):
         """
         Updates the result-entry with the given `uuid` to status 1|2 and
@@ -825,6 +867,7 @@ class SQLiteInterface:
         with Executor(self.db_name) as sql:
             sql.run(CMD_UPDATE_RESULT, parameters)
 
+    @db_access
     def delete_outdated_results(self):
         """
         Deletes results with status TASK_STATUS_READY that have exceeded
@@ -837,6 +880,7 @@ class SQLiteInterface:
 
     # -- setting-methods ---
 
+    @db_access
     def get_settings(self):
         """
         Returns a HybridNamespace instance with the settings as attributes:
@@ -855,6 +899,7 @@ class SQLiteInterface:
             settings = cursor.fetchone()  # there is only one row
         return settings
 
+    @db_access
     def set_settings(self, settings):
         """
         Takes a HybridNamespace instance as settings

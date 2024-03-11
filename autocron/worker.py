@@ -12,7 +12,6 @@ import time
 
 from autocron.schedule import CronScheduler
 from autocron import sql_interface
-from autocron.sql_interface import sqlite_call_wrapper
 
 
 WORKER_IDLE_TIME = 4.0  # seconds
@@ -56,7 +55,7 @@ class Worker:
         while self.active:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
-                sqlite_call_wrapper(self.interface.delete_outdated_results)
+                self.interface.delete_outdated_results()
                 time.sleep(self.interface.get_worker_idle_time())
         self.interface.decrement_running_workers(pid)
 
@@ -68,7 +67,7 @@ class Worker:
         method return `True` to indicate that meanwhile more tasks may be
         waiting.
         """
-        task = sqlite_call_wrapper(self.interface.get_next_task)
+        task = self.interface.get_next_task()
         if task:
             if self.active is False:
                 # don't process the task and terminate as soon as possible.
@@ -114,8 +113,7 @@ class Worker:
         """
         if task.uuid:
             # if the task has a uuid, store the result / error-message
-            sqlite_call_wrapper(
-                self.interface.update_result,
+            self.interface.update_result(
                 uuid=task.uuid,
                 result=self.result,
                 error_message=self.error_message
@@ -125,12 +123,10 @@ class Worker:
             # and update the task-entry
             scheduler = CronScheduler(crontab=task.crontab)
             schedule = scheduler.get_next_schedule()
-            sqlite_call_wrapper(
-                self.interface.update_task_schedule, task, schedule
-            )
+            self.interface.update_task_schedule(task, schedule)
         else:
             # not a cronjob: delete the task from the db
-            sqlite_call_wrapper(self.interface.delete_task, task)
+            self.interface.delete_task(task)
 
 
 def start_worker():
