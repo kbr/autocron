@@ -484,7 +484,7 @@ def run_write_thread(exit_event, db_name, command_queue):
         else:
             # item is a sequence of arguments
             command, parameters, many = item
-            sqlite_call_wrapper(writer, command, parameters, many)
+#             sqlite_call_wrapper(writer, command, parameters, many)
 
 
 class SQLiteInterface:
@@ -498,7 +498,6 @@ class SQLiteInterface:
     # pylint: disable=too-many-arguments
 
     _instance = None
-    _is_initialized = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -506,7 +505,7 @@ class SQLiteInterface:
         return cls._instance
 
     def __init__(self):
-        if self._is_initialized:
+        if self.__dict__:
             return
         self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(seconds=DEFAULT_RESULT_TTL)
@@ -516,7 +515,6 @@ class SQLiteInterface:
         self.command_queue = None
         self.write_thread = None
         self.exit_event = None
-        self.__class__._is_initialized = True
 
     @property
     def db_name(self):
