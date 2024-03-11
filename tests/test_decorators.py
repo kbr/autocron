@@ -37,6 +37,7 @@ class InterfaceFixture:
         self.db_name = db_name
         # set class attribute to None to not return a singleton
         sql_interface.SQLiteInterface._instance = None
+        sql_interface.SQLiteInterface._is_initialized = False
         self.interface = sql_interface.SQLiteInterface()
         # inject the new interface in the decorators-module
         # so the decorator-function access the same db-interface:

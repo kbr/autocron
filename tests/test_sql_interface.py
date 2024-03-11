@@ -43,6 +43,7 @@ def raw_interface():
     """
     # set class attribute to None to not return a singleton
     sql_interface.SQLiteInterface._instance = None
+    sql_interface.SQLiteInterface._is_initialized = False
     interface = sql_interface.SQLiteInterface()
     yield interface
     if interface.db_name is not None:
@@ -56,6 +57,7 @@ def interface():
     """
     # set class attribute to None to not return a singleton
     sql_interface.SQLiteInterface._instance = None
+    sql_interface.SQLiteInterface._is_initialized = False
     interface = sql_interface.SQLiteInterface()
     interface.init_database(db_name=TEST_DB_NAME)
     yield interface
