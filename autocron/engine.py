@@ -19,7 +19,7 @@ from .sql_interface import SQLiteInterface
 
 
 WORKER_MODULE_NAME = "worker.py"
-WORKER_START_DELAY = 0.2
+WORKER_START_DELAY = 0.05
 
 
 def start_subprocess(database_file):

@@ -21,8 +21,12 @@ import types
 
 DEFAULT_STORAGE = ".autocron"
 WRITE_THREAD_TIMEOUT = 2.0
-SQLITE_MAX_RETRY_LIMIT = 10
+
+# These constants are arbitrary values and based on practical experience:
+SQLITE_MAX_RETRY_LIMIT = 100
 SQLITE_OPERATIONAL_ERROR_DELAY = 0.01
+SQLITE_DELAY_INCREMENT_STEPS = 10
+SQLITE_DELAY_INCREMENT_FACTOR = 2.5
 
 
 # Status codes used for task-status the result-entries:
@@ -232,25 +236,6 @@ sqlite3.register_adapter(datetime.datetime, datetime_adapter)
 sqlite3.register_converter("datetime", datetime_converter)
 
 
-# def sqlite_call_wrapper(function, *args, **kwargs):
-#     """
-#     Helper function as wrapper for sqlite actions that may fail, i.e.
-#     because of a database lock. These functions are most often called
-#     from a worker to update status or results or by the decorator for
-#     registering, where the registering happens in a seperate thrtead.
-#     Therefor the blocking operation and sleep time does not affect the
-#     application that should not block.
-#     """
-#     message = ""
-#     for _ in range(SQLITE_MAX_RETRY_LIMIT):
-#         try:
-#             return function(*args, **kwargs)
-#         except sqlite3.OperationalError as err:
-#             message = str(err)
-#             time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
-#     raise sqlite3.OperationalError(message)
-
-
 def db_access(function):
     """
     Access decorator. Repeats the decorated function several times in
@@ -263,12 +248,15 @@ def db_access(function):
         error is raised.
         """
         message = ""
-        for _ in range(SQLITE_MAX_RETRY_LIMIT):
+        delay = SQLITE_OPERATIONAL_ERROR_DELAY
+        for retry_num in range(SQLITE_MAX_RETRY_LIMIT):
             try:
                 return function(*args, **kwargs)
             except sqlite3.OperationalError as err:
                 message = str(err)
-                time.sleep(SQLITE_OPERATIONAL_ERROR_DELAY)
+                time.sleep(delay)
+            if not retry_num % SQLITE_DELAY_INCREMENT_STEPS:
+                delay *= SQLITE_DELAY_INCREMENT_FACTOR
         raise sqlite3.OperationalError(message)
 
     return wrapper
@@ -345,13 +333,51 @@ class TaskResult(HybridNamespace):
         given function executed with the given arguments. This exists
         for type consistency to return a TaskResult from delay-decorated
         functions even if autotask is inactive.
+        The behaviour is the same: the function gets called and all
+        error get catched so the TaskResult instance must be checked for
+        the correct execution of the function.
         """
-        data = {
-            "function_result": func(*args, **kwargs),
-            "function_arguments": (args, kwargs),
-            "status": TASK_STATUS_READY
-        }
+        try:
+            result = func(*args, **kwargs)
+        except Exception as err:
+            error_message = str(err)
+            status = TASK_STATUS_ERROR
+            result = None
+        else:
+            error_message = ""
+            status = TASK_STATUS_READY
+        data = get_taskresult_data(func, status, args, kwargs,
+                                   result, error_message)
         return cls(data)
+
+    @classmethod
+    def from_registration(cls, func, *args, **kwargs):
+        """
+        Returns a new TaskResult-Instance from data available when a
+        function gets registered for background execution.
+        """
+        status = TASK_STATUS_WAITING
+        return cls(get_taskresult_data(func, status, args, kwargs))
+
+
+def get_taskresult_data(func, status, args=(), kwargs=None, result=None,
+                        error_message="", uuid="", ttl=DEFAULT_RESULT_TTL):
+    """
+    Internal helper function to populate the dict for the
+    classmethods to create a new instance.
+    """
+    if kwargs is None:
+        kwargs = {}
+    return {
+        "uuid": uuid,
+        "status": status,
+        "function_module": func.__module__,
+        "function_name": func.__name__,
+        "function_arguments": (args, kwargs),
+        "function_result": result,
+        "error_message": error_message,
+        "ttl": ttl
+    }
 
 
 # -------------------------------------
@@ -682,7 +708,7 @@ class SQLiteInterface:
 
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
-                      args=None, kwargs=None, unique=False):
+                      args=(), kwargs=None, unique=False):
         """
         Store a callable in the task-table of the database. If the
         callable is a delayed task with a potential result create also a
@@ -693,8 +719,6 @@ class SQLiteInterface:
         else:
             if not schedule:
                 schedule = datetime.datetime.now()
-            if args is None:
-                args = ()
             if kwargs is None:
                 kwargs = {}
             arguments = pickle.dumps((args, kwargs))
@@ -721,17 +745,15 @@ class SQLiteInterface:
                 sql.run(CMD_STORE_TASK, task_data)
                 # a delayed task has a uuid: create a result entry
                 if uuid:
-                    result_data = {
-                        "uuid": uuid,
-                        "status": TASK_STATUS_WAITING,
-                        "function_module": func.__module__,
-                        "function_name": func.__name__,
-                        "function_arguments": arguments,
-                        "function_result": pickle.dumps(None),
-                        "error_message": "",
-                        "ttl": self.result_ttl,
-                    }
-                    sql.run(CMD_STORE_RESULT, result_data)
+                    data = get_taskresult_data(
+                        func,
+                        status=TASK_STATUS_WAITING,
+                        uuid = uuid,
+                        ttl=self.result_ttl
+                    )
+                    data["function_arguments"] = arguments
+                    data["function_result"] = pickle.dumps(None)
+                    sql.run(CMD_STORE_RESULT, data)
 
     @db_access
     def get_tasks(self):
@@ -898,9 +920,7 @@ class SQLiteInterface:
         - rowid (not a setting but included)
         """
         with Executor(self.db_name, row_factory=settings_row_factory) as sql:
-            cursor = sql.run(CMD_SETTINGS_GET_SETTINGS)
-            settings = cursor.fetchone()  # there is only one row
-        return settings
+            return self._read_settings(sql)
 
     @db_access
     def set_settings(self, settings):
@@ -909,19 +929,8 @@ class SQLiteInterface:
         argument (like the one returned from get_settings) and updates
         the setting values in the database.
         """
-        data = (
-            settings.max_workers,
-            settings.running_workers,
-            int(settings.monitor_lock),
-            int(settings.autocron_lock),
-            settings.monitor_idle_time,
-            settings.worker_idle_time,
-            settings.worker_pids,
-            settings.result_ttl,
-            settings.rowid
-        )
         with Executor(self._db_name) as sql:
-            sql.run(CMD_SETTINGS_UPDATE, data)
+            self._store_settings(sql, settings)
 
     def get_monitor_idle_time(self):
         """
@@ -948,46 +957,84 @@ class SQLiteInterface:
         """
         return self.get_settings().monitor_lock
 
+    @db_access
     def set_monitor_lock_flag(self, value):
         """
         Set monitor_lock flag to the given state.
         """
-        settings = self.get_settings()
-        settings.monitor_lock = value
-        self.set_settings(settings)
+        with Executor(
+            self.db_name, row_factory=settings_row_factory, exclusive=True
+        ) as sql:
+            settings = self._read_settings(sql)
+            settings.monitor_lock = value
+            self._store_settings(sql, settings)
 
+    @db_access
     def increment_running_workers(self, pid):
         """
         Increment the running_worker-setting by 1.
         """
-        settings = self.get_settings()
-        if settings.worker_pids:
-            pids = settings.worker_pids.split(",")
-        else:
-            pids = []
-        pids.append(str(pid))
-        settings.worker_pids = ",".join(pids)
-        settings.running_workers += 1
-        self.set_settings(settings)
+        with Executor(
+            self.db_name, row_factory=settings_row_factory, exclusive=True
+        ) as sql:
+            settings = self._read_settings(sql)
+            if settings.worker_pids:
+                pids = f"{settings.worker_pids},{pid}"
+            else:
+                pids = str(pid)
+            settings.worker_pids = pids
+            settings.running_workers += 1
+            self._store_settings(sql, settings)
 
+    @db_access
     def decrement_running_workers(self, pid):
         """
         Decrement the running_worker-setting by 1.
         But don't allow a value below zero.
         """
-        settings = self.get_settings()
-        if settings.worker_pids:
-            pids = settings.worker_pids.split(",")
-        else:
-            pids = []
-        try:
-            pids.remove(str(pid))
-        except ValueError:
-            # can happen when decrement gets called before increment
-            # otherwise it is a weird error that should not happen
-            pass
-        else:
+        with Executor(
+            self.db_name, row_factory=settings_row_factory, exclusive=True
+        ) as sql:
+            settings = self._read_settings(sql)
+            if settings.worker_pids:
+                pids = settings.worker_pids.split(",")
+                try:
+                    pids.remove(str(pid))
+                except ValueError:
+                    # can happen when decrement gets called before increment
+                    # otherwise it is a weird error that should not happen
+                    pass
+                pids = ",".join(pids)
+            else:
+                pids = ""
+            settings.worker_pids = pids
             if settings.running_workers > 0:
                 settings.running_workers -= 1
-            settings.worker_pids = ",".join(pids)
-            self.set_settings(settings)
+            self._store_settings(sql, settings)
+
+    def _read_settings(self, sql):
+        """
+        Helper function to read and return the settings within an
+        Executor context given as `sql`.
+        """
+        cursor = sql.run(CMD_SETTINGS_GET_SETTINGS)
+        settings = cursor.fetchone()  # there is only one row
+        return settings
+
+    def _store_settings(self, sql, settings):
+        """
+        Helper function to store the settings within an Executor context
+        given as `sql`.
+        """
+        data = (
+            settings.max_workers,
+            settings.running_workers,
+            int(settings.monitor_lock),
+            int(settings.autocron_lock),
+            settings.monitor_idle_time,
+            settings.worker_idle_time,
+            settings.worker_pids,
+            settings.result_ttl,
+            settings.rowid
+        )
+        sql.run(CMD_SETTINGS_UPDATE, data)

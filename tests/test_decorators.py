@@ -220,7 +220,7 @@ def test_handle_delayed_task_when_autocron_is_inactive(interface):
 
     # and there is no uuid-attribute on the TaskResult because
     # the task was never registered:
-    assert getattr(task_result, "uuid", None) is None
+    assert task_result.uuid == ""
 
 
 def test_preregistration():
