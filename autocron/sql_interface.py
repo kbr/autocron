@@ -505,6 +505,7 @@ class SQLiteInterface:
         return cls._instance
 
     def __init__(self):
+        # run __init__ just on the first instance
         if self.__dict__:
             return
         self._preregistered_tasks = []
