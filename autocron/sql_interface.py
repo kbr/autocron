@@ -21,6 +21,7 @@ import types
 
 DEFAULT_STORAGE = ".autocron"
 WRITE_THREAD_TIMEOUT = 2.0
+REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
 
 # These constants are arbitrary values and based on practical experience:
 SQLITE_MAX_RETRY_LIMIT = 100
@@ -490,27 +491,54 @@ def settings_row_factory(cursor, row):
     return HybridNamespace(data)
 
 
-def run_write_thread(exit_event, db_name, command_queue):
+def register_background_task(exit_event, db_name, task_queue):
     """
-    Start the write thread to delegate the blocking I/O out of the main
-    process, that may run by an async framework.
+    Register task in a separate thread taking the tasks from a
+    task_queue.
     """
-    def writer(command, parameters, many):
-        with Executor(db_name) as sql:
-            sql.run(command, parameters=parameters, many=many)
-
+    interface = SQLiteInterface()
     while True:
         try:
-            item = command_queue.get(timeout=WRITE_THREAD_TIMEOUT)
+            data = task_queue.get(timeout=REGISTER_BACKGROUND_TASK_TIMEOUT)
         except queue.Empty:
             # check for exit_event on empty queue so the queue items
             # can get handled before terminating the thread
             if exit_event.is_set():
                 break
         else:
-            # item is a sequence of arguments
-            command, parameters, many = item
-#             sqlite_call_wrapper(writer, command, parameters, many)
+            # got a task for registration:
+            # The data is a dict with the keys: func, args, kwargs, uuid.
+            interface.register_task(
+                func=data["func"],
+                args=data["args"],
+                kwargs=data["kwargs"],
+                uuid=data["uuid"]
+            )
+
+
+
+
+# def run_write_thread(exit_event, db_name, command_queue):
+#     """
+#     Start the write thread to delegate the blocking I/O out of the main
+#     process, that may run by an async framework.
+#     """
+#     def writer(command, parameters, many):
+#         with Executor(db_name) as sql:
+#             sql.run(command, parameters=parameters, many=many)
+#
+#     while True:
+#         try:
+#             item = command_queue.get(timeout=WRITE_THREAD_TIMEOUT)
+#         except queue.Empty:
+#             # check for exit_event on empty queue so the queue items
+#             # can get handled before terminating the thread
+#             if exit_event.is_set():
+#                 break
+#         else:
+#             # item is a sequence of arguments
+#             command, parameters, many = item
+# #             sqlite_call_wrapper(writer, command, parameters, many)
 
 
 class SQLiteInterface:
@@ -540,7 +568,7 @@ class SQLiteInterface:
         self._db_name = None
         self.autocron_lock_is_set = None
         self.command_queue = None
-        self.write_thread = None
+        self.register_background_task_thread = None
         self.exit_event = None
 
     @property
@@ -652,30 +680,30 @@ class SQLiteInterface:
             self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
 
 
-    # -- write_thread-methods ---
+    # -- register_background_task_thread-methods ---
 
-    def start_write_thread(self):
+    def start_register_background_task_thread(self):
         """
         Starts a thread to handle blocking I/O writing to the database.
         """
         # safety check for not starting the thread multiple times
-        if not self.write_thread:
-            self.command_queue = queue.Queue()
+        if not self.register_background_task_thread:
+            self.task_queue = queue.Queue()
             self.exit_event = threading.Event()
-            self.write_thread = threading.Thread(
-                target=run_write_thread,
-                args=(self.exit_event, self._db_name, self.command_queue)
+            self.register_background_task_thread = threading.Thread(
+                target=register_background_task,
+                args=(self.exit_event, self._db_name, self.task_queue)
             )
-            self.write_thread.start()
+            self.register_background_task_thread.start()
 
-    def stop_write_thread(self):
+    def stop_register_background_task_thread(self):
         """
-        Terminates a running write_thread.
+        Terminates a running register_background_task thread.
         """
-        if self.write_thread:
+        if self.register_background_task_thread:
             if self.exit_event:
                 self.exit_event.set()
-                self.write_thread = None
+                self.register_background_task_thread = None
 
 
     # -- database api ---

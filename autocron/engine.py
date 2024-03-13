@@ -146,8 +146,8 @@ class Engine:
             )
             self.monitor_thread.start()
 
-        # and start the interface write-thread
-        self.interface.start_write_thread()
+        # and start the interface register_background_task_thread
+        self.interface.start_register_background_task_thread()
         return True
 
     def stop(self):
@@ -170,8 +170,8 @@ class Engine:
             settings.worker_pids = ""
             self.interface.set_settings(settings)
             self.interface.delete_crontasks()
-        # also stop the interface write-thread
-        self.interface.stop_write_thread()
+        # also stop the interface register_background_task_thread
+        self.interface.stop_register_background_task_thread()
 
     def _terminate(self, signalnum, stackframe=None):
         """
