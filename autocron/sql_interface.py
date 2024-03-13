@@ -408,7 +408,13 @@ class TaskResult(HybridNamespace):
         function gets registered for background execution.
         """
         status = TASK_STATUS_WAITING
-        return cls(get_taskresult_data(func, status, args, kwargs))
+        # in kwargs may be a `uuid` that must be forwarded
+        # as a keyword argument and not part of the kwargs.
+        uuid = kwargs.pop("uuid")
+        data = get_taskresult_data(
+            func, status, args=args, kwargs=kwargs, uuid=uuid
+        )
+        return cls(data)
 
 
 def get_taskresult_data(func, status, args=(), kwargs=None, result=None,
@@ -498,31 +504,73 @@ class Executor:
             return self.connection.execute(command, parameters)
 
 
+# ---------------------------------------------------------------------
+# Thread based background-task registration
 
-def register_background_task(exit_event, db_name, task_queue):
+class TaskRegistrator:
     """
-    Register task in a separate thread taking the tasks from a
-    task_queue.
+    Handles the task registration in a separate thread so that
+    registration is a non-blocking operation.
     """
-    interface = SQLiteInterface()
-    while True:
-        try:
-            data = task_queue.get(timeout=REGISTER_BACKGROUND_TASK_TIMEOUT)
-        except queue.Empty:
-            # check for exit_event on empty queue so the queue items
-            # can get handled before terminating the thread
-            if exit_event.is_set():
-                break
-        else:
-            # got a task for registration:
-            # The data is a dict with the keys: func, args, kwargs, uuid.
-            interface.register_task(
-                func=data["func"],
-                args=data["args"],
-                kwargs=data["kwargs"],
-                uuid=data["uuid"]
+
+    def __init__(self, interface):
+        self.interface = interface
+        self.task_queue = queue.Queue()
+        self.exit_event = threading.Event()
+        self.registration_thread = None
+
+    def register(self, func, schedule=None, crontab="", uuid="",
+                       args=(), kwargs=None, unique=False):
+        """
+        Register a task for later processing. Arguments are the same as
+        for `SQLiteInterface.register_task()` which is called from a
+        seperate thread.
+        """
+        if kwargs is None:
+            kwargs = {}
+        self.task_queue.put(
+            {key: value for key, value in locals().items() if key != "self"}
+        )
+
+    def _process_queue(self):
+        """
+        Register task in a separate thread taking the tasks from a
+        task_queue.
+        """
+        while True:
+            try:
+                data = self.task_queue.get(
+                    timeout=REGISTER_BACKGROUND_TASK_TIMEOUT
+                )
+            except queue.Empty:
+                # check for exit_event on empty queue so the queue items
+                # can get handled before terminating the thread
+                if self.exit_event.is_set():
+                    break
+            else:
+                # got a task for registration:
+                # The data is a dict with the locals() from self.register()
+                # excluding "self".
+                self.interface.register_task(**data)
+
+    def start(self):
+        """
+        Start processing the queue in a seperate thread.
+        """
+        # don't start multiple threads
+        if self.registration_thread is None:
+            self.registration_thread = threading.Thread(
+                target=self._process_queue
             )
+            self.registration_thread.start()
 
+    def stop(self):
+        """
+        Terminates the running registration thread.
+        """
+        if self.registration_thread:
+            self.exit_event.set()
+            self.registration_thread = None
 
 
 # ---------------------------------------------------------------------
@@ -549,14 +597,11 @@ class SQLiteInterface:
         # run __init__ just on the first instance
         if self.__dict__:
             return
-        self._preregistered_tasks = []
         self._result_ttl = datetime.timedelta(seconds=DEFAULT_RESULT_TTL)
         self._accept_registrations = True
         self._db_name = None
         self.autocron_lock_is_set = None
-        self.command_queue = None
-        self.register_background_task_thread = None
-        self.exit_event = None
+        self.task_registrator = TaskRegistrator(self)
 
     @property
     def db_name(self):
@@ -656,41 +701,10 @@ class SQLiteInterface:
                 if parameters:
                     sql.run(CMD_UPDATE_TASK_STATUS, parameters)
 
-            # register all callables processed at import time
-            # before autocron started (should only be cron-tasks)
-            for data in self._preregistered_tasks:
-                self.register_task(**data)
-
             # read some of the current settings
             settings = self.get_settings()
             self.autocron_lock_is_set = settings.autocron_lock
             self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
-
-
-    # -- register_background_task_thread-methods ---
-
-    def start_register_background_task_thread(self):
-        """
-        Starts a thread to handle blocking I/O writing to the database.
-        """
-        # safety check for not starting the thread multiple times
-        if not self.register_background_task_thread:
-            self.task_queue = queue.Queue()
-            self.exit_event = threading.Event()
-            self.register_background_task_thread = threading.Thread(
-                target=register_background_task,
-                args=(self.exit_event, self._db_name, self.task_queue)
-            )
-            self.register_background_task_thread.start()
-
-    def stop_register_background_task_thread(self):
-        """
-        Terminates a running register_background_task thread.
-        """
-        if self.register_background_task_thread:
-            if self.exit_event:
-                self.exit_event.set()
-                self.register_background_task_thread = None
 
 
     # -- database api ---
@@ -729,46 +743,43 @@ class SQLiteInterface:
         callable is a delayed task with a potential result create also a
         corresponding entry in the result table.
         """
-        if not self.is_initialized:
-            self._preregister_task(locals())
-        else:
-            if not schedule:
-                schedule = datetime.datetime.now()
-            if kwargs is None:
-                kwargs = {}
-            arguments = pickle.dumps((args, kwargs))
-            task_data = {
-                "uuid": uuid,
-                "schedule": schedule,
-                "status": TASK_STATUS_WAITING,
-                "crontab": crontab,
-                "function_module": func.__module__,
-                "function_name": func.__name__,
-                "function_arguments": arguments,
-            }
+        if not schedule:
+            schedule = datetime.datetime.now()
+        if kwargs is None:
+            kwargs = {}
+        arguments = pickle.dumps((args, kwargs))
+        task_data = {
+            "uuid": uuid,
+            "schedule": schedule,
+            "status": TASK_STATUS_WAITING,
+            "crontab": crontab,
+            "function_module": func.__module__,
+            "function_name": func.__name__,
+            "function_arguments": arguments,
+        }
 
-            with Executor(
-                self._db_name,
-                row_factory=task_row_factory,
-                exclusive=True
-            ) as sql:
-                if unique:
-                    parameters = (func.__module__, func.__name__)
-                    cursor = sql.run(CMD_GET_TASKS_BY_NAME, parameters)
-                    for task in cursor.fetchall():
-                        sql.run(CMD_DELETE_TASK, [task.rowid])
-                sql.run(CMD_STORE_TASK, task_data)
-                # a delayed task has a uuid: create a result entry
-                if uuid:
-                    data = get_taskresult_data(
-                        func,
-                        status=TASK_STATUS_WAITING,
-                        uuid = uuid,
-                        ttl=self.result_ttl
-                    )
-                    data["function_arguments"] = arguments
-                    data["function_result"] = pickle.dumps(None)
-                    sql.run(CMD_STORE_RESULT, data)
+        with Executor(
+            self._db_name,
+            row_factory=task_row_factory,
+            exclusive=True
+        ) as sql:
+            if unique:
+                parameters = (func.__module__, func.__name__)
+                cursor = sql.run(CMD_GET_TASKS_BY_NAME, parameters)
+                for task in cursor.fetchall():
+                    sql.run(CMD_DELETE_TASK, [task.rowid])
+            sql.run(CMD_STORE_TASK, task_data)
+            # a delayed task has a uuid: create a result entry
+            if uuid:
+                data = get_taskresult_data(
+                    func,
+                    status=TASK_STATUS_WAITING,
+                    uuid = uuid,
+                    ttl=self.result_ttl
+                )
+                data["function_arguments"] = arguments
+                data["function_result"] = pickle.dumps(None)
+                sql.run(CMD_STORE_RESULT, data)
 
     @db_access
     def get_tasks(self):

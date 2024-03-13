@@ -47,8 +47,11 @@ class InterfaceFixture:
         # allows to initialize the database in a later step.
         # this is necessary for the preregistration test.
         self.interface.init_database(db_name=self.db_name)
+        self.interface.task_registrator.start()
+
 
     def tear_down(self):
+        self.interface.task_registrator.stop()
         decorators.interface = self.decorators_interface
         if self.interface.db_name:
             pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
@@ -74,6 +77,9 @@ def test_cron_with_default_crontab(interface):
     wrapper = decorators.cron()
     func = wrapper(tst_cron)
     assert func == tst_cron
+
+    # give the registrator a bit time to do the job
+    time.sleep(0.1)
 
     # the cron.wrapper() has registered the task in the database
     entries = interface.get_tasks()
@@ -106,6 +112,9 @@ def test_suppress_identic_cronjobs(interface):
     crontab = "10 2 1 * *"
     decorators.cron(crontab=crontab)(tst_cron)
 
+    # give the registrator a bit time to do the job
+    time.sleep(0.1)
+
     # just a single entry should now be in the database
     # and should have the crontab "10 2 1 * *"
     entries = interface.count_tasks()
@@ -131,6 +140,10 @@ def test_allow_different_cronjobs(functions, expected_entries, interface):
     """
     for function in functions:
         decorators.cron()(function)
+
+    # give the registrator a bit time to do the jobs
+    time.sleep(0.1)
+
     assert expected_entries == interface.count_tasks()
 
 
@@ -146,7 +159,8 @@ def test_register_cronjob_if_allowed(function, is_cron, allowed, interface):
     """
     callables should only registered if the interface accepts
     registrations. This check is not implemented by
-    interface.register_callable() but has to be made by the decorators.
+    interface.task_registrator.register() but has to be made by the
+    decorators.
     """
     assert interface.autocron_lock_is_set is False
     interface.accept_registrations = allowed
@@ -154,6 +168,8 @@ def test_register_cronjob_if_allowed(function, is_cron, allowed, interface):
         decorators.cron()(function)
     else:
         decorators.delay(function)()
+    # give the registrator a bit time to do the job
+    time.sleep(0.1)
     assert allowed is bool(interface.count_tasks())
 
 
@@ -173,9 +189,12 @@ def test_handle_registered_task(interface):
 
     # register delayed task
     task_result = decorators.delay(tst_add)(30, 12)
-    assert task_result.uuid is not None
     assert isinstance(task_result.uuid, str)
+    assert len(task_result.uuid) > 0
     assert task_result.is_waiting is True
+
+    # give the registrator a bit time to do the job
+    time.sleep(0.1)
 
     # a single entry is now in the task- and the result-table:
     assert interface.count_tasks() == 1
@@ -240,8 +259,13 @@ def test_preregistration():
     fixture.set_up()
     interface = fixture.interface
 
+#     # start the registration thread and wait a short time:
+#     interface.task_registrator.start()
+#     time.sleep(0.1)
+
     # the database should now have both functions registered:
     assert interface.count_tasks() == 2
 
     # manually tear down the fixture:
+#     interface.task_registrator.stop()
     fixture.tear_down()

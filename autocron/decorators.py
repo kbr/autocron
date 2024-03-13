@@ -107,7 +107,7 @@ def cron(crontab=None,
                 crontab=crontab
             )
             schedule = scheduler.get_next_schedule()
-            interface.register_task(
+            interface.task_registrator.register(
                 func,
                 schedule=schedule,
                 crontab=crontab,
@@ -136,8 +136,8 @@ def delay(func):
             # active: return TaskResult in waiting state
             uid = uuid.uuid4().hex
             data = {"args": args, "kwargs": kwargs, "uuid": uid}
-            interface.register_task(func, **data)
-            result = interface.get_result_by_uuid(uuid=uid)
+            interface.task_registrator.register(func, **data)
+            result = TaskResult.from_registration(func, **data)
         elif interface.autocron_lock_is_set:
             # inactive: return TaskResult in ready state
             # by calling the wrapped function. This will keep the
