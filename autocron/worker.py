@@ -45,15 +45,12 @@ class Worker:
         If worker_idle_time is in auto-mode (value in database settings
         is 0), then calculate the idle time based on the number of
         active workers. A higher idle time is necessary on higher
-        numbers of workers to keep the  sqlite database accessible and
+        numbers of workers to keep the sqlite database accessible and
         reactive.
-
-        Up to three workers the idle time is 1 second.
-        From 4 worker on the idle time is int(log2(workers)):
-        From 4 to 7 workers the idle time are 2 seconds,
-        from 8 to 15 are 3 seconds,
-        from 16 to 31 are 4 seconds
-        and so on.
+        The formular here is just an estimation about a working idle
+        time. Applications can set the idle time explicitly with the cli
+        admin tool.
+        (btw. beware of insane high worker numbers.)
         """
         idle_time = self.interface.get_worker_idle_time()
         if not idle_time:
