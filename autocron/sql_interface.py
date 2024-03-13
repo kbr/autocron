@@ -151,8 +151,8 @@ CREATE TABLE IF NOT EXISTS {DB_TABLE_NAME_SETTINGS}
     running_workers INTEGER,
     monitor_lock INTEGER,
     autocron_lock INTEGER,
-    monitor_idle_time REAL,
-    worker_idle_time REAL,
+    monitor_idle_time INTEGER,
+    worker_idle_time INTEGER,
     worker_pids TEXT,
     result_ttl INTEGER
 )
@@ -162,8 +162,8 @@ DEFAULT_MAX_WORKERS = 1
 DEFAULT_RUNNING_WORKERS = 0
 DEFAULT_MONITOR_LOCK = 0
 DEFAULT_AUTOCRON_LOCK = 0
-DEFAULT_MONITOR_IDLE_TIME = 5.0  # seconds
-DEFAULT_WORKER_IDLE_TIME = 2.0  # seconds
+DEFAULT_MONITOR_IDLE_TIME = 5  # seconds
+DEFAULT_WORKER_IDLE_TIME = 0  # 0 seconds means auto idle time
 DEFAULT_WORKER_PIDS = ""
 DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) for results in seconds
 
@@ -1057,8 +1057,8 @@ class SQLiteInterface:
             settings.running_workers,
             int(settings.monitor_lock),
             int(settings.autocron_lock),
-            settings.monitor_idle_time,
-            settings.worker_idle_time,
+            int(settings.monitor_idle_time),
+            int(settings.worker_idle_time),
             settings.worker_pids,
             settings.result_ttl,
             settings.rowid

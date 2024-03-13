@@ -5,6 +5,7 @@ worker class for handling cron and delegated tasks.
 """
 
 import importlib
+import math
 import os
 import signal
 import sys
@@ -14,7 +15,7 @@ from autocron.schedule import CronScheduler
 from autocron import sql_interface
 
 
-WORKER_IDLE_TIME = 4.0  # seconds
+WORKER_IDLE_TIME = 1  # one second as base idle time for auto-calculation
 
 
 class Worker:
@@ -30,13 +31,38 @@ class Worker:
         signal.signal(signal.SIGTERM, self.terminate)
         # Get a SQLiteInterface instance 'as is' without the
         # initialization step to clean up tasks.
-        # Providing the databasename will set the dtatabase
+        # Providing the databasename will set the database
         # to initialized-state. So no new tasks are registered
         # from a worker.
         # (keep in mind that every worker runs in a separate process.)
         self.interface = sql_interface.SQLiteInterface()
         self.interface.db_name=database_filename
         self.interface.accept_registrations = False
+        self.worker_idle_time = self.interface.get_worker_idle_time()
+
+    def _get_worker_idle_time(self):
+        """
+        If worker_idle_time is in auto-mode (value in database settings
+        is 0), then calculate the idle time based on the number of
+        active workers. A higher idle time is necessary on higher
+        numbers of workers to keep the  sqlite database accessible and
+        reactive.
+
+        Up to three workers the idle time is 1 second.
+        From 4 worker on the idle time is int(log2(workers)):
+        From 4 to 7 workers the idle time are 2 seconds,
+        from 8 to 15 are 3 seconds,
+        from 16 to 31 are 4 seconds
+        and so on.
+        """
+        idle_time = self.interface.get_worker_idle_time()
+        if not idle_time:
+            max_workers = self.interface.get_max_workers()
+            if max_workers >= 8:
+                idle_time = int(math.log2(workers)) - 1
+            else:
+                idle_time = WORKER_IDLE_TIME
+        return idle_time
 
     def terminate(self, *args):  # pylint: disable=unused-argument
         """
@@ -56,7 +82,7 @@ class Worker:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-                time.sleep(self.interface.get_worker_idle_time())
+                time.sleep(self.worker_idle_time)
         self.interface.decrement_running_workers(pid)
 
     def handle_tasks(self):

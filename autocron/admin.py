@@ -231,13 +231,13 @@ def get_command_line_arguments():
     parser.add_argument(
         "--set-worker-idle-time",
         dest="worker_idle_time",
-        type=float,
+        type=int,
         help="set worker idle time in seconds."
     )
     parser.add_argument(
         "--set-monitor-idle-time",
         dest="monitor_idle_time",
-        type=float,
+        type=int,
         help="set monitor idle time in seconds."
     )
     parser.add_argument(
@@ -313,7 +313,7 @@ def main(args=None):
     elif args.worker_idle_time:
         set_worker_idle_time(args.worker_idle_time)
     elif args.monitor_idle_time:
-        set_worker_idle_time(args.monitor_idle_time)
+        set_monitor_idle_time(args.monitor_idle_time)
     elif args.result_ttl:
         set_result_ttl(args.result_ttl)
     else:

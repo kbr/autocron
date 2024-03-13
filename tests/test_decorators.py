@@ -259,9 +259,8 @@ def test_preregistration():
     fixture.set_up()
     interface = fixture.interface
 
-#     # start the registration thread and wait a short time:
-#     interface.task_registrator.start()
-#     time.sleep(0.1)
+    # give the registrator a bit time to do the job
+    time.sleep(0.1)
 
     # the database should now have both functions registered:
     assert interface.count_tasks() == 2
