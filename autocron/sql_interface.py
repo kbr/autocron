@@ -215,8 +215,10 @@ CMD_SETTINGS_UPDATE = f"""
 CMD_EXCLUSIVE = "BEGIN EXCLUSIVE"
 
 
-# sqlite3 default adapters and converters deprecated as of Python 3.12:
+# ---------------------------------------------------------------------
+# SQLite3 specific functions
 
+# sqlite3 default adapters and converters deprecated as of Python 3.12:
 def datetime_adapter(value):
     """
     Gets a python datetime-instance and returns an ISO 8601 formated
@@ -237,6 +239,51 @@ sqlite3.register_adapter(datetime.datetime, datetime_adapter)
 sqlite3.register_converter("datetime", datetime_converter)
 
 
+# sqlite3 row factories:
+def task_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from a task-table to a
+    correponding HybridNamespace object.
+    """
+    function_arguments_column_name = TASK_COLUMN_SEQUENCE.rsplit(
+        ",", maxsplit=1)[-1]
+    data = {}
+    column_names = [entry[0] for entry in cursor.description]
+    for name, value in zip(column_names, row):
+        if name == function_arguments_column_name:
+            args, kwargs = pickle.loads(value)
+            data["args"] = args
+            data["kwargs"] = kwargs
+        else:
+            data[name] = value
+    return HybridNamespace(data)
+
+
+def result_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from the result-table to a
+    TaskResult instance.
+    """
+    column_names = [entry[0] for entry in cursor.description]
+    data = dict(zip(column_names, row))
+    result = TaskResult(data)
+    result.function_result = pickle.loads(result.function_result)
+    result.function_arguments = pickle.loads(result.function_arguments)
+    return result
+
+
+def settings_row_factory(cursor, row):
+    """
+    SQLite factory class to convert a row from a settings-table to a
+    correponding HybridNamespace object.
+    """
+    column_names = [entry[0] for entry in cursor.description]
+    data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
+            for name, value in zip(column_names, row)}
+    return HybridNamespace(data)
+
+
+# sqlite3: decorator for functions accessing the database
 def db_access(function):
     """
     Access decorator. Repeats the decorated function several times in
@@ -262,6 +309,9 @@ def db_access(function):
 
     return wrapper
 
+
+# ---------------------------------------------------------------------
+# Helper classes for data representation
 
 # pylint does not like instances with dynamic attributes:
 # pylint: disable=attribute-defined-outside-init
@@ -381,8 +431,8 @@ def get_taskresult_data(func, status, args=(), kwargs=None, result=None,
     }
 
 
-# -------------------------------------
-# database access and helpers
+# ---------------------------------------------------------------------
+# context manager for database access
 
 class Executor:
     """
@@ -448,48 +498,6 @@ class Executor:
             return self.connection.execute(command, parameters)
 
 
-def task_row_factory(cursor, row):
-    """
-    SQLite factory class to convert a row from a task-table to a
-    correponding HybridNamespace object.
-    """
-    function_arguments_column_name = TASK_COLUMN_SEQUENCE.rsplit(
-        ",", maxsplit=1)[-1]
-    data = {}
-    column_names = [entry[0] for entry in cursor.description]
-    for name, value in zip(column_names, row):
-        if name == function_arguments_column_name:
-            args, kwargs = pickle.loads(value)
-            data["args"] = args
-            data["kwargs"] = kwargs
-        else:
-            data[name] = value
-    return HybridNamespace(data)
-
-
-def result_row_factory(cursor, row):
-    """
-    SQLite factory class to convert a row from the result-table to a
-    TaskResult instance.
-    """
-    column_names = [entry[0] for entry in cursor.description]
-    data = dict(zip(column_names, row))
-    result = TaskResult(data)
-    result.function_result = pickle.loads(result.function_result)
-    result.function_arguments = pickle.loads(result.function_arguments)
-    return result
-
-
-def settings_row_factory(cursor, row):
-    """
-    SQLite factory class to convert a row from a settings-table to a
-    correponding HybridNamespace object.
-    """
-    column_names = [entry[0] for entry in cursor.description]
-    data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
-            for name, value in zip(column_names, row)}
-    return HybridNamespace(data)
-
 
 def register_background_task(exit_event, db_name, task_queue):
     """
@@ -517,29 +525,8 @@ def register_background_task(exit_event, db_name, task_queue):
 
 
 
-
-# def run_write_thread(exit_event, db_name, command_queue):
-#     """
-#     Start the write thread to delegate the blocking I/O out of the main
-#     process, that may run by an async framework.
-#     """
-#     def writer(command, parameters, many):
-#         with Executor(db_name) as sql:
-#             sql.run(command, parameters=parameters, many=many)
-#
-#     while True:
-#         try:
-#             item = command_queue.get(timeout=WRITE_THREAD_TIMEOUT)
-#         except queue.Empty:
-#             # check for exit_event on empty queue so the queue items
-#             # can get handled before terminating the thread
-#             if exit_event.is_set():
-#                 break
-#         else:
-#             # item is a sequence of arguments
-#             command, parameters, many = item
-# #             sqlite_call_wrapper(writer, command, parameters, many)
-
+# ---------------------------------------------------------------------
+# SQLite3 database access interface:
 
 class SQLiteInterface:
     """
