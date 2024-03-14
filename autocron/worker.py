@@ -5,7 +5,6 @@ worker class for handling cron and delegated tasks.
 """
 
 import importlib
-import math
 import os
 import signal
 import sys
@@ -16,6 +15,7 @@ from autocron import sql_interface
 
 
 DEFAULT_WORKER_IDLE_TIME = 1  # base idle time for auto-calculation
+AUTO_WORKER_INCREMENT_STEP = 16
 
 
 class Worker:
@@ -38,7 +38,8 @@ class Worker:
         self.interface = sql_interface.SQLiteInterface()
         self.interface.db_name=database_filename
         self.interface.accept_registrations = False
-        self.worker_idle_time = self.interface.get_worker_idle_time()
+#         self.worker_idle_time = self.interface.get_worker_idle_time()
+        self.worker_idle_time = self._get_worker_idle_time()
 
     def _get_worker_idle_time(self):
         """
@@ -47,18 +48,12 @@ class Worker:
         active workers. A higher idle time is necessary on higher
         numbers of workers to keep the sqlite database accessible and
         reactive.
-        The formular here is just an estimation about a working idle
-        time. Applications can set the idle time explicitly with the cli
-        admin tool.
-        (btw. beware of insane high worker numbers.)
         """
         idle_time = self.interface.get_worker_idle_time()
         if not idle_time:
             workers = self.interface.get_max_workers()
-            if workers >= 8:
-                idle_time = int(math.log2(workers)) - 1
-            else:
-                idle_time = DEFAULT_WORKER_IDLE_TIME
+            idle_time = DEFAULT_WORKER_IDLE_TIME
+            idle_time += workers // AUTO_WORKER_INCREMENT_STEP
         return idle_time
 
     def terminate(self, *args):  # pylint: disable=unused-argument
@@ -79,8 +74,14 @@ class Worker:
             if not self.handle_tasks():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-                time.sleep(self.worker_idle_time)
-        self.interface.decrement_running_workers(pid)
+                # don't check the database again for
+                # self.worker_idle_time (which is an integer in seconds)
+                # but wakeup every second the check for termination
+                for _ in range(self.worker_idle_time * 10):
+                    if not self.active:
+                        break
+                    time.sleep(DEFAULT_WORKER_IDLE_TIME / 10)
+#         self.interface.decrement_running_workers(pid)
 
     def handle_tasks(self):
         """

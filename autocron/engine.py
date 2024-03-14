@@ -19,7 +19,7 @@ from .sql_interface import SQLiteInterface
 
 
 WORKER_MODULE_NAME = "worker.py"
-WORKER_START_DELAY = 0.05
+WORKER_START_DELAY = 0.02
 
 
 def start_subprocess(database_file):
@@ -75,6 +75,7 @@ def run_worker_monitor(exit_event, database_file):
             break
     for entry in processes:
         entry.process.terminate()
+
 
 
 class Engine:
@@ -155,23 +156,19 @@ class Engine:
         Shut down the monitor-thread which in turn will stop all running
         workers. Also release the monitor_lock flag.
         """
+        # no more registrations
+        self.interface.task_registrator.stop()
+        # clean up the database
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.
             # in production if self.monitor_thread is not None
             # self.exit_event is also not None
             if self.exit_event:
+                # terminate the monitor thread which
+                # send sigterm signals to the workers
                 self.exit_event.set()
             self.monitor_thread = None
-            settings = self.interface.get_settings()
-            settings.monitor_lock = False
-            # in case of a crash the workers will terminate but
-            # may not reliable reset their states. So do it here:
-            settings.running_workers = 0
-            settings.worker_pids = ""
-            self.interface.set_settings(settings)
-            self.interface.delete_crontasks()
-        # also stop the interface register_background_task_thread
-        self.interface.task_registrator.stop()
+        self.interface.shut_down_process()
 
     def _terminate(self, signalnum, stackframe=None):
         """

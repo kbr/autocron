@@ -66,17 +66,23 @@ def test_start_is_allowed(interface):
     Stopping the engine should release the monitor-lock flag.
     """
     engine_ = engine.Engine(interface=interface)
-    # prevent the test to start a thread:
-    engine_.monitor_thread = "some reference"
+    # prevent the test to start the monitor- and task_registrator-threads:
+    interface.task_registrator.registration_thread = True
+    engine_.monitor_thread = True
+
     result = engine_.start(TEST_DB_NAME)
+    time.sleep(0.02)  # give db some time
     assert result is True
+
 
     # try to start a second time:
     result = engine_.start(TEST_DB_NAME)
     assert result is False
 
-    # check the monito-lock flag is set and released after engine.stop()
+    # check the monitor-lock flag is set and released after engine.stop()
     assert engine_.interface.monitor_lock_flag_is_set is True
+    interface.task_registrator.registration_thread = None
+    engine_.monitor_thread = None
     engine_.stop()
     assert engine_.interface.monitor_lock_flag_is_set is False
 
@@ -120,3 +126,4 @@ def test_delete_crontasks_on_shutdown(interface):
     # and the remaining task should be the add-task:
     task = interface.get_tasks()[0]
     assert bool(task.crontab) is False
+

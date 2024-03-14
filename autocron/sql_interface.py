@@ -23,11 +23,10 @@ DEFAULT_STORAGE = ".autocron"
 WRITE_THREAD_TIMEOUT = 2.0
 REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
 
-# These constants are arbitrary values and based on practical experience:
-SQLITE_MAX_RETRY_LIMIT = 100
+SQLITE_OPERATIONAL_ERROR_RETRIES = 100
 SQLITE_OPERATIONAL_ERROR_DELAY = 0.01
-SQLITE_DELAY_INCREMENT_STEPS = 10
-SQLITE_DELAY_INCREMENT_FACTOR = 2.5
+SQLITE_DELAY_INCREMENT_STEPS = 20
+SQLITE_DELAY_INCREMENT_FACTOR = 1.5
 
 
 # Status codes used for task-status the result-entries:
@@ -297,7 +296,7 @@ def db_access(function):
         """
         message = ""
         delay = SQLITE_OPERATIONAL_ERROR_DELAY
-        for retry_num in range(SQLITE_MAX_RETRY_LIMIT):
+        for retry_num in range(SQLITE_OPERATIONAL_ERROR_RETRIES):
             try:
                 return function(*args, **kwargs)
             except sqlite3.OperationalError as err:
@@ -465,7 +464,7 @@ class Executor:
 
     def __enter__(self):
         self.connection = sqlite3.connect(
-            self.db_name,
+            database=self.db_name,
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         if self.row_factory:
@@ -701,10 +700,12 @@ class SQLiteInterface:
                 if parameters:
                     sql.run(CMD_UPDATE_TASK_STATUS, parameters)
 
-            # read some of the current settings
-            settings = self.get_settings()
-            self.autocron_lock_is_set = settings.autocron_lock
-            self._result_ttl = datetime.timedelta(seconds=settings.result_ttl)
+                # read some of the current settings
+                settings = self.get_settings()
+                self.autocron_lock_is_set = settings.autocron_lock
+                self._result_ttl = datetime.timedelta(
+                    seconds=settings.result_ttl
+                )
 
 
     # -- database api ---
@@ -1028,7 +1029,7 @@ class SQLiteInterface:
                     pids.remove(str(pid))
                 except ValueError:
                     # can happen when decrement gets called before increment
-                    # otherwise it is a weird error that should not happen
+                    # or the engine clears the list
                     pass
                 pids = ",".join(pids)
             else:
@@ -1064,3 +1065,22 @@ class SQLiteInterface:
             settings.rowid
         )
         sql.run(CMD_SETTINGS_UPDATE, data)
+
+
+    # -- engine shut-down ---
+
+    @db_access
+    def shut_down_process(self):
+        """
+        Reset all settings here so that the workers don't have to access
+        the database again on shutdown.
+        """
+        with Executor(
+            self.db_name, row_factory=settings_row_factory, exclusive=True
+        ) as sql:
+            settings = self._read_settings(sql)
+            settings.monitor_lock = False
+            settings.running_workers = 0
+            settings.worker_pids = ""
+            self._store_settings(sql, settings)
+        self.delete_crontasks()
