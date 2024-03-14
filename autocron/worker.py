@@ -15,7 +15,7 @@ from autocron.schedule import CronScheduler
 from autocron import sql_interface
 
 
-WORKER_IDLE_TIME = 1  # one second as base idle time for auto-calculation
+DEFAULT_WORKER_IDLE_TIME = 1  # base idle time for auto-calculation
 
 
 class Worker:
@@ -54,11 +54,11 @@ class Worker:
         """
         idle_time = self.interface.get_worker_idle_time()
         if not idle_time:
-            max_workers = self.interface.get_max_workers()
-            if max_workers >= 8:
+            workers = self.interface.get_max_workers()
+            if workers >= 8:
                 idle_time = int(math.log2(workers)) - 1
             else:
-                idle_time = WORKER_IDLE_TIME
+                idle_time = DEFAULT_WORKER_IDLE_TIME
         return idle_time
 
     def terminate(self, *args):  # pylint: disable=unused-argument
