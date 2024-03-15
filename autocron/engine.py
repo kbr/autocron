@@ -36,48 +36,6 @@ def start_subprocess(database_file):
     return subprocess.Popen(cmd, cwd=cwd)
 
 
-# def run_worker_monitor(exit_event, database_file):
-#     """
-#     Starts the worker processes and monitors that the workers are up and
-#     running. Restart workers if necessary. This function must run in a
-#     separate thread. The 'exit_event' is a threading.Event() instance
-#     and the `database_file` is a string with an absolute or relative
-#     path to the database in use. If the monitor receives an exit_event
-#     the running workers are terminated and the function will return,
-#     terminating its own thread as well.
-#     """
-#     processes = []
-#     interface = SQLiteInterface()
-#     interface.db_name = database_file
-#     max_workers = interface.get_max_workers()
-#     for _ in range(max_workers):
-#         process = start_subprocess(database_file)
-#         processes.append(SimpleNamespace(pid=process.pid, process=process))
-#         # don't start multiple workers too fast one after the other
-#         # because they may run into a sqlite write-lock. This will not cause
-#         # a wrong behaviour on starting, monitoring and stopping the workers
-#         # but can lead to a wrong statistic in the autocron admin/setting.
-#         time.sleep(WORKER_START_DELAY)
-#     while True:
-#         for entry in processes:
-#             if entry.process.poll() is not None:
-#                 # trouble: process is not running any more.
-#                 # deregister the terminated process from the setting
-#                 # and start a new process.
-#                 interface.decrement_running_workers(entry.pid)
-#                 new_process = start_subprocess(database_file)
-#                 entry.pid = new_process.pid
-#                 entry.process = new_process
-#                 # in case more than one process needs a restart:
-#                 time.sleep(WORKER_START_DELAY)
-#         idle_time = interface.get_monitor_idle_time()
-#         if exit_event.wait(timeout=idle_time):
-#             break
-#     for entry in processes:
-#         entry.process.terminate()
-
-
-
 class Engine:
     """
     The Engine is the entry-point for autocron. Starting the engine will
