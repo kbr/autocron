@@ -36,45 +36,45 @@ def start_subprocess(database_file):
     return subprocess.Popen(cmd, cwd=cwd)
 
 
-def run_worker_monitor(exit_event, database_file):
-    """
-    Starts the worker processes and monitors that the workers are up and
-    running. Restart workers if necessary. This function must run in a
-    separate thread. The 'exit_event' is a threading.Event() instance
-    and the `database_file` is a string with an absolute or relative
-    path to the database in use. If the monitor receives an exit_event
-    the running workers are terminated and the function will return,
-    terminating its own thread as well.
-    """
-    processes = []
-    interface = SQLiteInterface()
-    interface.db_name = database_file
-    max_workers = interface.get_max_workers()
-    for _ in range(max_workers):
-        process = start_subprocess(database_file)
-        processes.append(SimpleNamespace(pid=process.pid, process=process))
-        # don't start multiple workers too fast one after the other
-        # because they may run into a sqlite write-lock. This will not cause
-        # a wrong behaviour on starting, monitoring and stopping the workers
-        # but can lead to a wrong statistic in the autocron admin/setting.
-        time.sleep(WORKER_START_DELAY)
-    while True:
-        for entry in processes:
-            if entry.process.poll() is not None:
-                # trouble: process is not running any more.
-                # deregister the terminated process from the setting
-                # and start a new process.
-                interface.decrement_running_workers(entry.pid)
-                new_process = start_subprocess(database_file)
-                entry.pid = new_process.pid
-                entry.process = new_process
-                # in case more than one process needs a restart:
-                time.sleep(WORKER_START_DELAY)
-        idle_time = interface.get_monitor_idle_time()
-        if exit_event.wait(timeout=idle_time):
-            break
-    for entry in processes:
-        entry.process.terminate()
+# def run_worker_monitor(exit_event, database_file):
+#     """
+#     Starts the worker processes and monitors that the workers are up and
+#     running. Restart workers if necessary. This function must run in a
+#     separate thread. The 'exit_event' is a threading.Event() instance
+#     and the `database_file` is a string with an absolute or relative
+#     path to the database in use. If the monitor receives an exit_event
+#     the running workers are terminated and the function will return,
+#     terminating its own thread as well.
+#     """
+#     processes = []
+#     interface = SQLiteInterface()
+#     interface.db_name = database_file
+#     max_workers = interface.get_max_workers()
+#     for _ in range(max_workers):
+#         process = start_subprocess(database_file)
+#         processes.append(SimpleNamespace(pid=process.pid, process=process))
+#         # don't start multiple workers too fast one after the other
+#         # because they may run into a sqlite write-lock. This will not cause
+#         # a wrong behaviour on starting, monitoring and stopping the workers
+#         # but can lead to a wrong statistic in the autocron admin/setting.
+#         time.sleep(WORKER_START_DELAY)
+#     while True:
+#         for entry in processes:
+#             if entry.process.poll() is not None:
+#                 # trouble: process is not running any more.
+#                 # deregister the terminated process from the setting
+#                 # and start a new process.
+#                 interface.decrement_running_workers(entry.pid)
+#                 new_process = start_subprocess(database_file)
+#                 entry.pid = new_process.pid
+#                 entry.process = new_process
+#                 # in case more than one process needs a restart:
+#                 time.sleep(WORKER_START_DELAY)
+#         idle_time = interface.get_monitor_idle_time()
+#         if exit_event.wait(timeout=idle_time):
+#             break
+#     for entry in processes:
+#         entry.process.terminate()
 
 
 
@@ -91,6 +91,42 @@ class Engine:
         self.exit_event = None
         self.monitor_thread = None
         self.orig_signal_handlers = {}
+        self.processes = []
+
+    def worker_monitor(self):
+        """
+        Starts the worker processes and monitors that the workers are up and
+        running. Restart workers if necessary. This function must run in a
+        separate thread. The 'exit_event' is a threading.Event() instance
+        and the `database_file` is a string with an absolute or relative
+        path to the database in use. If the monitor receives an exit_event
+        the running workers are terminated and the function will return,
+        terminating its own thread as well.
+        """
+        database_file = self.interface.db_name
+        idle_time = self.interface.get_monitor_idle_time()
+        max_workers = self.interface.get_max_workers()
+        for _ in range(max_workers):
+            process = start_subprocess(database_file)
+            self.processes.append(
+                SimpleNamespace(pid=process.pid, process=process)
+            )
+            time.sleep(WORKER_START_DELAY)
+        while True:
+            for entry in self.processes:
+                if entry.process.poll() is not None:
+                    # trouble: process is not running any more.
+                    # deregister the terminated process from the setting
+                    # and start a new process.
+                    self.interface.decrement_running_workers(entry.pid)
+                    new_process = start_subprocess(database_file)
+                    entry.pid = new_process.pid
+                    entry.process = new_process
+                    # in case more than one process needs a restart:
+                    time.sleep(WORKER_START_DELAY)
+            if self.exit_event.wait(timeout=idle_time):
+                # terminate thread on exit-event:
+                break
 
     def set_signal_handlers(self):
         """
@@ -141,10 +177,11 @@ class Engine:
         if not self.monitor_thread:
             self.set_signal_handlers()
             self.exit_event = threading.Event()
-            self.monitor_thread = threading.Thread(
-                target=run_worker_monitor,
-                args=(self.exit_event, database_file)
-            )
+            self.monitor_thread = threading.Thread(target=self.worker_monitor)
+#             self.monitor_thread = threading.Thread(
+#                 target=run_worker_monitor,
+#                 args=(self.exit_event, database_file)
+#             )
             self.monitor_thread.start()
 
         # and start the interface register_background_task_thread
@@ -158,17 +195,19 @@ class Engine:
         """
         # no more registrations
         self.interface.task_registrator.stop()
-        # clean up the database
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.
             # in production if self.monitor_thread is not None
             # self.exit_event is also not None
             if self.exit_event:
-                # terminate the monitor thread which
-                # send sigterm signals to the workers
+                # terminate the monitor thread
                 self.exit_event.set()
             self.monitor_thread = None
+        # clean up the database
         self.interface.shut_down_process()
+        # terminate the workers here in the main process:
+        for entry in self.processes:
+            entry.process.terminate()
 
     def _terminate(self, signalnum, stackframe=None):
         """
