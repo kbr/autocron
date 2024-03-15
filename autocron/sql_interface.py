@@ -527,9 +527,15 @@ class TaskRegistrator:
         """
         if kwargs is None:
             kwargs = {}
-        self.task_queue.put(
-            {key: value for key, value in locals().items() if key != "self"}
-        )
+        self.task_queue.put({
+            "func": func,
+            "schedule": schedule,
+            "crontab": crontab,
+            "uuid": uuid,
+            "args": args,
+            "kwargs": kwargs,
+            "unique": unique
+        })
 
     def _process_queue(self):
         """
@@ -654,15 +660,6 @@ class SQLiteInterface:
         Returns the new ttl as a datetime instance with an offset of now.
         """
         return datetime.datetime.now() + self._result_ttl
-
-    def _preregister_task(self, data):
-        """
-        Take the data, which is a dictionary,and convert it to another
-        dict without the key 'self'. Pickle the dict and append it to
-        _preregistered tasks.
-        """
-        data = {k: v for k, v in data.items() if k != "self"}
-        self._preregistered_tasks.append(data)
 
     @db_access
     def init_database(self, db_name):
