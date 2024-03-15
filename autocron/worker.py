@@ -38,7 +38,6 @@ class Worker:
         self.interface = sql_interface.SQLiteInterface()
         self.interface.db_name=database_filename
         self.interface.accept_registrations = False
-#         self.worker_idle_time = self.interface.get_worker_idle_time()
         self.worker_idle_time = self._get_worker_idle_time()
 
     def _get_worker_idle_time(self):
@@ -81,7 +80,6 @@ class Worker:
                     if not self.active:
                         break
                     time.sleep(DEFAULT_WORKER_IDLE_TIME / 10)
-#         self.interface.decrement_running_workers(pid)
 
     def handle_tasks(self):
         """
