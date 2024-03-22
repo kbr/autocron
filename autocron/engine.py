@@ -8,6 +8,7 @@ handles this.
 """
 
 import pathlib
+import queue
 import signal
 import subprocess
 import sys
@@ -36,6 +37,86 @@ def start_subprocess(database_file):
     return subprocess.Popen(cmd, cwd=cwd)
 
 
+# ---------------------------------------------------------------------
+# Thread based background-task registration
+
+class TaskRegistrator:
+    """
+    Handles the task registration in a separate thread so that
+    registration is a non-blocking operation.
+    """
+
+    def __init__(self, interface):
+        self.interface = interface
+        self.task_queue = queue.Queue()
+        self.exit_event = threading.Event()
+        self.registration_thread = None
+
+    def register(self, func, schedule=None, crontab="", uuid="",
+                       args=(), kwargs=None, unique=False):
+        """
+        Register a task for later processing. Arguments are the same as
+        for `SQLiteInterface.register_task()` which is called from a
+        seperate thread.
+        """
+        if kwargs is None:
+            kwargs = {}
+        self.task_queue.put({
+            "func": func,
+            "schedule": schedule,
+            "crontab": crontab,
+            "uuid": uuid,
+            "args": args,
+            "kwargs": kwargs,
+            "unique": unique
+        })
+
+    def _process_queue(self):
+        """
+        Register task in a separate thread taking the tasks from a
+        task_queue.
+        """
+        while True:
+            try:
+                data = self.task_queue.get(
+                    timeout=REGISTER_BACKGROUND_TASK_TIMEOUT
+                )
+            except queue.Empty:
+                # check for exit_event on empty queue so the queue items
+                # can get handled before terminating the thread
+                if self.exit_event.is_set():
+                    break
+            else:
+                # got a task for registration:
+                # The data is a dict with the locals() from self.register()
+                # excluding "self".
+                self.interface.register_task(**data)
+
+    def start(self):
+        """
+        Start processing the queue in a seperate thread.
+        """
+        # don't start multiple threads
+        if self.registration_thread is None:
+            self.registration_thread = threading.Thread(
+                target=self._process_queue
+            )
+            self.registration_thread.start()
+
+    def stop(self):
+        """
+        Terminates the running registration thread.
+        """
+        if self.registration_thread:
+            self.exit_event.set()
+            self.registration_thread = None
+
+
+# ---------------------------------------------------------------------
+# autocron entry point:
+# Engine.start()
+# see: __init__.py
+
 class Engine:
     """
     The Engine is the entry-point for autocron. Starting the engine will
@@ -50,6 +131,7 @@ class Engine:
         self.monitor_thread = None
         self.orig_signal_handlers = {}
         self.processes = []
+        self.task_registrator = TaskRegistrator(self.interface)
 
     def worker_monitor(self):
         """
@@ -136,14 +218,10 @@ class Engine:
             self.set_signal_handlers()
             self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(target=self.worker_monitor)
-#             self.monitor_thread = threading.Thread(
-#                 target=run_worker_monitor,
-#                 args=(self.exit_event, database_file)
-#             )
             self.monitor_thread.start()
 
         # and start the interface register_background_task_thread
-        self.interface.task_registrator.start()
+        self.task_registrator.start()
         return True
 
     def stop(self):
@@ -152,7 +230,7 @@ class Engine:
         workers. Also release the monitor_lock flag.
         """
         # no more registrations
-        self.interface.task_registrator.stop()
+        self.task_registrator.stop()
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.
             # in production if self.monitor_thread is not None
