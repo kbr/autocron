@@ -76,8 +76,8 @@ def test_init_database(raw_interface):
     """
     raw_interface.init_database(TEST_DB_NAME)
     with Connection(raw_interface.db_name) as conn:
-        settings = Settings(conn)
-        rows = settings.count_rows()
+#         settings = Settings(conn)
+        rows = Settings.count_rows(conn)
         assert rows == 1
 
 def test_update_settings(raw_interface):
@@ -117,6 +117,17 @@ def test_store_and_read_task(interface):
         assert success is task
         assert task.args == args
         assert task.kwargs == kwargs
+
+# def test_delete_task(interface):
+#     """
+#     Delete a task.
+#     """
+#     with Connection(interface.db_name) as conn:
+#         task = Task(conn)
+#         task.store(tst_function)
+#     with Connection(interface.db_name) as conn:
+#         task = Task(conn)
+#         task.store(tst_function)
 
 
 

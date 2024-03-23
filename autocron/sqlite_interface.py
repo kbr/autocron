@@ -136,13 +136,18 @@ class Model:
         columns = ",".join(columns)
         return f"SELECT {columns} FROM {self.table_name}"
 
-    def count_rows(self):
-        """Return the number of rows in the table.
+    def get_sql_delete(self):
+        """Returns the sql to delete an entry based on the rowid.
         """
-        sql = f"SELECT COUNT(*) FROM {self.table_name}"
-        cursor = self.connection.run(sql)
-        rows = cursor.fetchone()[0]
-        return rows
+        return f"DELETE FROM {self.table_name} WHERE rowid == {self.rowid}"
+
+#     def count_rows(self):
+#         """Return the number of rows in the table.
+#         """
+#         sql = f"SELECT COUNT(*) FROM {self.table_name}"
+#         cursor = self.connection.run(sql)
+#         rows = cursor.fetchone()[0]
+#         return rows
 
     def store(self, data):
         """
@@ -166,10 +171,24 @@ class Model:
         kwargs["id_value"] = id_value
         self.connection.run(sql, parameters=kwargs)
 
+    def delete(self):
+        """Delete the item from the database-table.
+        """
+        self.connection.run(self.get_sql_delete())
+
     @classmethod
     def create_table(cls, connection):
         sql = cls.get_sql_create_table(cls)
         connection.run(sql)
+
+    @classmethod
+    def count_rows(cls, connection):
+        """Return the number of rows in the table.
+        """
+        sql = f"SELECT COUNT(*) FROM {cls.table_name}"
+        cursor = connection.run(sql)
+        rows = cursor.fetchone()[0]
+        return rows
 
 
 class Task(Model):
@@ -446,7 +465,7 @@ class SQLiteInterface:
 
                 # set default settings if no settings stored:
                 settings = Settings(conn)
-                if not settings.count_rows():
+                if not Settings.count_rows(conn):
                     settings.store(SETTINGS_DEFAULT_DATA)
 
                 # read settings that don't change during runtime:
