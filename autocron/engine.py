@@ -16,11 +16,13 @@ import threading
 import time
 from types import SimpleNamespace
 
-from .sql_interface import SQLiteInterface
+from .sqlite_interface import SQLiteInterface
 
 
 WORKER_MODULE_NAME = "worker.py"
 WORKER_START_DELAY = 0.02
+
+REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
 
 
 def start_subprocess(database_file):
@@ -144,9 +146,7 @@ class Engine:
         terminating its own thread as well.
         """
         database_file = self.interface.db_name
-        idle_time = self.interface.get_monitor_idle_time()
-        max_workers = self.interface.get_max_workers()
-        for _ in range(max_workers):
+        for _ in range(self.interface.max_workers):
             process = start_subprocess(database_file)
             self.processes.append(
                 SimpleNamespace(pid=process.pid, process=process)
@@ -164,7 +164,7 @@ class Engine:
                     entry.process = new_process
                     # in case more than one process needs a restart:
                     time.sleep(WORKER_START_DELAY)
-            if self.exit_event.wait(timeout=idle_time):
+            if self.exit_event.wait(timeout=self.interface.monitor_idle_time):
                 # terminate thread on exit-event:
                 break
 
@@ -204,13 +204,10 @@ class Engine:
         self.interface.init_database(database_file)
         if (
             self.interface.autocron_lock_is_set
-            or self.interface.monitor_lock_flag_is_set
+            or not self.interface.is_worker_master
         ):
-            # in both cases start is not allowed
+            # inactive or another process is already the worker master
             return False
-
-        # set lock-flag as soon as possible
-        self.interface.set_monitor_lock_flag(True)
 
         # this is a safety check for not starting more than
         # one monitor thread:

@@ -7,7 +7,7 @@ process.
 import uuid
 
 from .schedule import CronScheduler
-from .sql_interface import SQLiteInterface, TaskResult
+from .sqlite_interface import SQLiteInterface
 
 
 # default: run every minute:

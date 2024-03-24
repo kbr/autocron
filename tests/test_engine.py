@@ -12,7 +12,7 @@ import warnings
 import pytest
 
 from autocron import engine
-from autocron import sql_interface
+from autocron import sqlite_interface
 from autocron import worker
 
 
@@ -37,8 +37,8 @@ def interface():
     Returns a new database instance.
     """
     # set class attribute to None to not return a singleton
-    sql_interface.SQLiteInterface._instance = None
-    interface = sql_interface.SQLiteInterface()
+    sqlite_interface.SQLiteInterface._instance = None
+    interface = sqlite_interface.SQLiteInterface()
     yield interface
     if interface.db_name:
         pathlib.Path(interface.db_name).unlink(missing_ok=True)
@@ -67,24 +67,17 @@ def test_start_is_allowed(interface):
     """
     engine_ = engine.Engine(interface=interface)
     # prevent the test to start the monitor- and task_registrator-threads:
-    interface.task_registrator.registration_thread = True
+    engine_.task_registrator.registration_thread = True
     engine_.monitor_thread = True
 
     result = engine_.start(TEST_DB_NAME)
     time.sleep(0.02)  # give db some time
     assert result is True
 
-
-    # try to start a second time:
+    # try to start with worker_master False:
+    interface.is_worker_master = False
     result = engine_.start(TEST_DB_NAME)
     assert result is False
-
-    # check the monitor-lock flag is set and released after engine.stop()
-    assert engine_.interface.monitor_lock_flag_is_set is True
-    interface.task_registrator.registration_thread = None
-    engine_.monitor_thread = None
-    engine_.stop()
-    assert engine_.interface.monitor_lock_flag_is_set is False
 
 
 def test_start_and_stop_workerprocess():

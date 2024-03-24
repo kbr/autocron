@@ -100,6 +100,7 @@ class Model:
 
     def __init__(self, connection=None):
         self.connection = connection
+        self.rowid = None
 
     def get_sql_create_table(self):
         columns = ",".join(
@@ -113,7 +114,8 @@ class Model:
         columns = ",".join(
             f":{name}" for name in self.columns.keys()
         )
-        return f"INSERT INTO {self.table_name} VALUES ({columns})"
+        return f"""INSERT INTO {self.table_name} VALUES ({columns})
+                   RETURNING rowid"""
 
     def get_sql_update(self, columns, id_name):
         """
@@ -141,22 +143,18 @@ class Model:
         """
         return f"DELETE FROM {self.table_name} WHERE rowid == {self.rowid}"
 
-#     def count_rows(self):
-#         """Return the number of rows in the table.
-#         """
-#         sql = f"SELECT COUNT(*) FROM {self.table_name}"
-#         cursor = self.connection.run(sql)
-#         rows = cursor.fetchone()[0]
-#         return rows
-
     def store(self, data):
         """
         Store a new row. data is a dictionary with all column data.
-        Returns a cursor object to fetch a list of tuples with the
-        rowids created by sqlite.
+        After storage the instance-attribute `rowid` will be set.
         """
         sql = self.get_sql_store_all_columns()
-        return self.connection.run(sql, data)
+        cursor = self.connection.run(sql, data)
+        result = cursor.fetchone()
+        # result is a tuple representing the RETURNING values
+        # from the sql command. In this case it is tuple with
+        # a single entry holding the new created rowid:
+        self.rowid = result[0]
 
     def update(self, id_name=None, id_value=None, **kwargs):
         """
@@ -190,6 +188,31 @@ class Model:
         rows = cursor.fetchone()[0]
         return rows
 
+    @classmethod
+    def read_all(cls, connection):
+        """
+        Returns a list of entries from the table-class. The
+        connection-attribute is set to None because it would be invalide
+        anyway.
+        """
+        sql = cls.get_sql_read_all_columns(cls)
+        cursor = connection.run(sql)
+        cursor.row_factory = cls.row_factory
+        entries = []
+        for data in cursor.fetchall():
+            entry = cls()
+            entry.__dict__.update(data)
+            entries.append(entry)
+        return entries
+
+    @classmethod
+    def change_status(cls, connection, prev_status, new_status):
+        """Change status of all entries from a given status to a new one.
+        """
+        sql = f"""UPDATE {cls.table_name} SET status = :new_status
+                  WHERE status == :prev_status"""
+        connection.run(sql, locals())
+
 
 class Task(Model):
 
@@ -212,6 +235,10 @@ class Task(Model):
     def get_sql_crontasks_on_due(self):
         sql = self.get_sql_tasks_on_due()
         return f"{sql} AND crontab <> ''"
+
+    def get_sql_select_by_status(self):
+        sql = self.get_sql_read_all_columns()
+        return f"{sql} WHERE status == :status"
 
     def _get_next_task_on_due(self, sql, schedule):
         parameters = {"schedule": schedule}
@@ -258,6 +285,13 @@ class Task(Model):
         }
         super().store(data)
 
+    @classmethod
+    def delete_crontasks(cls, connection):
+        """Delete all task which are cron-tasks.
+        """
+        sql = f"DELETE FROM {cls.table_name} WHERE crontab <> ''"
+        connection.run(sql)
+
     @staticmethod
     def row_factory(cursor, row):
         """
@@ -291,7 +325,23 @@ class Result(Model):
         "ttl": "datetime"
     }
 
-
+    def store(self, func, uuid, args=(), kwargs=None):
+        """
+        Stores a new entry in the result table waiting to get updated
+        later after executing the function. ttl is set to default and
+        gets updated when the result is updated.
+        """
+        data = {
+            "uuid": uuid,
+            "status": TASK_STATUS_WAITING,
+            "function_module": func.__module__,
+            "function_name": func.__name__,
+            "function_arguments": pickle.dumps((args, kwargs)),
+            "function_result": pickle.dumps(None),
+            "error_message": "",
+            "ttl": SETTINGS_DEFAULT_RESULT_TTL
+        }
+        super().store(data)
 
 
 class Settings(Model):
@@ -355,6 +405,11 @@ class SQLiteConnection:
         return self
 
     def __exit__(self, *args):
+        if any(args):
+            # there was an exception:
+            self.connection.rollback()
+        else:
+            self.connection.commit()
         self.connection.close()
 
     def run(self, command, parameters=(), many=None):
@@ -366,7 +421,7 @@ class SQLiteConnection:
         If the command supports named style, parameters should be a
         dictionary. If many is True, parameters should be a sequence of
         dicts.
-        Returns the result of the given command and causes a commit()
+        Returns the result of the given command.
         """
         if parameters and many is None:
             # try to find out whether it is many or not:
@@ -376,10 +431,9 @@ class SQLiteConnection:
                 # sequence or dict then these are parameters for an
                 # executemany() command, else just execute()
                 many = isinstance(parameters[0], (tuple, list, dict))
-        with self.connection:
-            if many:
-                return self.connection.executemany(command, parameters)
-            return self.connection.execute(command, parameters)
+        if many:
+            return self.connection.executemany(command, parameters)
+        return self.connection.execute(command, parameters)
 
 
 Connection = SQLiteConnection
@@ -484,3 +538,84 @@ class SQLiteInterface:
                         # this process handles the workers
                         self.is_worker_master = True
 
+                # tasks from the last run in processing state and therefor
+                # not finished are reset to waiting mode to get executed
+                # again.
+                Task.change_status(
+                    conn,
+                    prev_status=TASK_STATUS_PROCESSING,
+                    new_status=TASK_STATUS_WAITING
+                )
+
+    @db_access
+    def register_task(self, func, schedule=None, crontab="", uuid="",
+                      args=(), kwargs=None, unique=False):
+        """
+        Store a callable in the task-table of the database. If the
+        callable is a delayed task with a potential result create also a
+        corresponding entry in the result table.
+        """
+        if not schedule:
+            schedule = datetime.datetime.now()
+        if kwargs is None:
+            kwargs = {}
+        with Connection(self.db_name, exclusive=True) as conn:
+            task = Task(conn)
+            task.store(func, schedule, crontab, uuid, args, kwargs)
+
+            # if a uuid is given it is a delayed function that
+            # may return a result:
+            if uuid:
+                result = Result(conn)
+                result.store(func, uuid, args, kwargs)
+
+    @db_access
+    def get_next_task(self):
+        """
+        Returns the next task on due with crontasks first or None if
+        there is not task on due. If a task is returned the status is
+        set to TASK_STATUS_PROCESSING first.
+        """
+        schedule = datetime.datetime.now()
+        with Connection(self.db_name, exclusive=True) as conn:
+            task = Task(conn)
+            for task_getter in (task.read_next_crontask, task.read_next_task):
+                found = task_getter(schedule)
+                if found:
+                    break
+            else:
+                return None
+            task.update(status=TASK_STATUS_PROCESSING)
+            return task
+
+    @db_access
+    def count_tasks(self):
+        """Return the number of entries in the task-table.
+        """
+        with Connection(self.db_name) as conn:
+            return Task.count_rows(conn)
+
+    @db_access
+    def get_tasks(self):
+        """Return a list of all tasks.
+        """
+        with Connection(self.db_name) as conn:
+            return Task.read_all(conn)
+
+    @db_access
+    def shut_down_process(self):
+        """
+        Reset all settings here so that the workers don't have to access
+        the database again on shutdown.
+        """
+        # gets called from the engine in case the interface
+        # is the worker_master
+        with Connection(self.db_name) as conn:
+            settings = Settings(conn)
+            settings.read()
+            settings.update(
+                monitor_lock=False,
+                running_workers=0,
+                worker_pids=""
+            )
+            Task.delete_crontasks(conn)

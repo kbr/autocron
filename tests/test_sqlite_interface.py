@@ -12,8 +12,11 @@ from autocron import sqlite_interface
 
 from autocron.sqlite_interface import (
     SETTINGS_DEFAULT_WORKERS,
+    TASK_STATUS_WAITING,
+    TASK_STATUS_PROCESSING,
     Connection,
     Settings,
+    Result,
     Task
 )
 
@@ -23,6 +26,12 @@ TEST_DB_NAME = "test.db"
 
 def tst_function(*args, **kwargs):
     return args, kwargs
+
+def tst_cron_function():
+    return None
+
+def tst_add_function(a, b):
+    return a + b
 
 
 @pytest.fixture
@@ -76,9 +85,9 @@ def test_init_database(raw_interface):
     """
     raw_interface.init_database(TEST_DB_NAME)
     with Connection(raw_interface.db_name) as conn:
-#         settings = Settings(conn)
         rows = Settings.count_rows(conn)
         assert rows == 1
+
 
 def test_update_settings(raw_interface):
     """
@@ -97,6 +106,7 @@ def test_update_settings(raw_interface):
         # also the 'worker_master' should be True
         assert raw_interface.is_worker_master is True
         assert settings.monitor_lock is True
+
 
 def test_store_and_read_task(interface):
     """
@@ -118,16 +128,64 @@ def test_store_and_read_task(interface):
         assert task.args == args
         assert task.kwargs == kwargs
 
-# def test_delete_task(interface):
-#     """
-#     Delete a task.
-#     """
-#     with Connection(interface.db_name) as conn:
-#         task = Task(conn)
-#         task.store(tst_function)
-#     with Connection(interface.db_name) as conn:
-#         task = Task(conn)
-#         task.store(tst_function)
+
+def test_delete_task(interface):
+    """
+    Delete a task.
+    """
+    with Connection(interface.db_name) as conn:
+        task = Task(conn)
+        task.store(tst_function)
+        assert Task.count_rows(conn) == 1
+        task.delete()
+        assert Task.count_rows(conn) == 0
 
 
+def test_register_cron_task(interface):
+    """
+    Register a cron task should create a task entry but no result
+    entry.
+    """
+    interface.register_task(tst_function, crontab="*")
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 1
+        assert Result.count_rows(conn) == 0
+
+
+def test_register_delayed_task(interface):
+    """
+    Register a delayed task should create a task entry and also a result
+    entry.
+    """
+    interface.register_task(tst_cron_function, uuid="*")
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 1
+        assert Result.count_rows(conn) == 1
+
+
+def test_get_next_task(interface):
+    """
+    Returns the next task on due and crontasks first.
+    """
+    delta = datetime.timedelta(hours=1)
+    now = datetime.datetime.now()
+    interface.register_task(
+        tst_cron_function, crontab="*", schedule=now - 2 * delta)
+    interface.register_task(
+        tst_function, crontab="*", schedule=now - delta)
+    interface.register_task(
+        tst_add_function, crontab="*", schedule=now + delta)
+
+    # get_next_task should return at first the tst_cron_function
+    # and then the tst_function.
+    # The tst_add_function should not get returned:
+
+    task = interface.get_next_task()
+    assert task.function_name == tst_cron_function.__name__
+
+    task = interface.get_next_task()
+    assert task.function_name == tst_function.__name__
+
+    task = interface.get_next_task()
+    assert task is None
 
