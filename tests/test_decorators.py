@@ -5,7 +5,7 @@ import time
 import pytest
 
 from autocron import decorators
-from autocron import sql_interface
+from autocron import sqlite_interface
 from autocron import worker
 
 
@@ -36,8 +36,8 @@ class InterfaceFixture:
     def __init__(self, db_name=TEST_DB_NAME):
         self.db_name = db_name
         # set class attribute to None to not return a singleton
-        sql_interface.SQLiteInterface._instance = None
-        self.interface = sql_interface.SQLiteInterface()
+        sqlite_interface.SQLiteInterface._instance = None
+        self.interface = sqlite_interface.SQLiteInterface()
         # inject the new interface in the decorators-module
         # so the decorator-function access the same db-interface:
         self.decorators_interface = decorators.interface
@@ -47,11 +47,11 @@ class InterfaceFixture:
         # allows to initialize the database in a later step.
         # this is necessary for the preregistration test.
         self.interface.init_database(db_name=self.db_name)
-        self.interface.task_registrator.start()
+        self.interface.registrator.start()
 
 
     def tear_down(self):
-        self.interface.task_registrator.stop()
+        self.interface.registrator.stop()
         decorators.interface = self.decorators_interface
         if self.interface.db_name:
             pathlib.Path(self.interface.db_name).unlink(missing_ok=True)
@@ -159,11 +159,10 @@ def test_register_cronjob_if_allowed(function, is_cron, allowed, interface):
     """
     callables should only registered if the interface accepts
     registrations. This check is not implemented by
-    interface.task_registrator.register() but has to be made by the
+    interface.registrator.register() but has to be made by the
     decorators.
     """
-    assert interface.autocron_lock_is_set is False
-    interface.accept_registrations = allowed
+    assert interface.autocron_lock is False
     if is_cron:
         decorators.cron()(function)
     else:
@@ -229,8 +228,7 @@ def test_handle_delayed_task_when_autocron_is_inactive(interface):
     expected_result = sum(arguments)
 
     # deactivate autocron:
-    interface.autocron_lock_is_set = True
-    assert interface.accept_registrations is False
+    interface.autocron_lock = True
 
     # call a delay decorated function and get the result right back:
     task_result = decorators.delay(tst_add)(30, 12)

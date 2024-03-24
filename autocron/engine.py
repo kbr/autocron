@@ -39,86 +39,6 @@ def start_subprocess(database_file):
     return subprocess.Popen(cmd, cwd=cwd)
 
 
-# ---------------------------------------------------------------------
-# Thread based background-task registration
-
-class TaskRegistrator:
-    """
-    Handles the task registration in a separate thread so that
-    registration is a non-blocking operation.
-    """
-
-    def __init__(self, interface):
-        self.interface = interface
-        self.task_queue = queue.Queue()
-        self.exit_event = threading.Event()
-        self.registration_thread = None
-
-    def register(self, func, schedule=None, crontab="", uuid="",
-                       args=(), kwargs=None, unique=False):
-        """
-        Register a task for later processing. Arguments are the same as
-        for `SQLiteInterface.register_task()` which is called from a
-        seperate thread.
-        """
-        if kwargs is None:
-            kwargs = {}
-        self.task_queue.put({
-            "func": func,
-            "schedule": schedule,
-            "crontab": crontab,
-            "uuid": uuid,
-            "args": args,
-            "kwargs": kwargs,
-            "unique": unique
-        })
-
-    def _process_queue(self):
-        """
-        Register task in a separate thread taking the tasks from a
-        task_queue.
-        """
-        while True:
-            try:
-                data = self.task_queue.get(
-                    timeout=REGISTER_BACKGROUND_TASK_TIMEOUT
-                )
-            except queue.Empty:
-                # check for exit_event on empty queue so the queue items
-                # can get handled before terminating the thread
-                if self.exit_event.is_set():
-                    break
-            else:
-                # got a task for registration:
-                # The data is a dict with the locals() from self.register()
-                # excluding "self".
-                self.interface.register_task(**data)
-
-    def start(self):
-        """
-        Start processing the queue in a seperate thread.
-        """
-        # don't start multiple threads
-        if self.registration_thread is None:
-            self.registration_thread = threading.Thread(
-                target=self._process_queue
-            )
-            self.registration_thread.start()
-
-    def stop(self):
-        """
-        Terminates the running registration thread.
-        """
-        if self.registration_thread:
-            self.exit_event.set()
-            self.registration_thread = None
-
-
-# ---------------------------------------------------------------------
-# autocron entry point:
-# Engine.start()
-# see: __init__.py
-
 class Engine:
     """
     The Engine is the entry-point for autocron. Starting the engine will
@@ -133,7 +53,6 @@ class Engine:
         self.monitor_thread = None
         self.orig_signal_handlers = {}
         self.processes = []
-        self.task_registrator = TaskRegistrator(self.interface)
 
     def worker_monitor(self):
         """
@@ -201,33 +120,32 @@ class Engine:
         mean, that no workers are running – another application process
         may have be first.
         """
-        self.interface.init_database(database_file)
-        if (
-            self.interface.autocron_lock_is_set
-            or not self.interface.is_worker_master
-        ):
-            # inactive or another process is already the worker master
-            return False
+        result = False
+        if self.interface.autocron_lock:
+            return result
 
-        # this is a safety check for not starting more than
-        # one monitor thread:
-        if not self.monitor_thread:
+        # init the database first to try to aquire the monitor lock
+        # for becoming the worker master:
+        self.interface.init_database(database_file)
+
+        # start the registrator thread to populate the database:
+        self.interface.registrator.start()
+
+        # start the monitor thread if the process is the worker master
+        # but dont't start the monitor twice:
+        if self.interface.is_worker_master and not self.monitor_thread:
             self.set_signal_handlers()
             self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(target=self.worker_monitor)
             self.monitor_thread.start()
-
-        # and start the interface register_background_task_thread
-        self.task_registrator.start()
-        return True
+            result = True
+        return result
 
     def stop(self):
         """
         Shut down the monitor-thread which in turn will stop all running
         workers. Also release the monitor_lock flag.
         """
-        # no more registrations
-        self.task_registrator.stop()
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.
             # in production if self.monitor_thread is not None
@@ -236,8 +154,9 @@ class Engine:
                 # terminate the monitor thread
                 self.exit_event.set()
             self.monitor_thread = None
-        # clean up the database
-        self.interface.shut_down_process()
+        # stop registration and clean up the database
+        self.interface.registrator.stop()
+        self.interface.tear_down_database()
         # terminate the workers here in the main process:
         for entry in self.processes:
             entry.process.terminate()

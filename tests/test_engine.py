@@ -57,29 +57,6 @@ def test_start_subprocess():
     assert process.poll() is not None
 
 
-def test_start_is_allowed(interface):
-    """
-    Scenario: by default autocron- and monitor-lock flags are False,
-    allowing to start a new monitor. In this case engine.start() returns
-    True. This should set the monitor-lock flag preventing to start the
-    engine a second time. In this case engine.start() return False.
-    Stopping the engine should release the monitor-lock flag.
-    """
-    engine_ = engine.Engine(interface=interface)
-    # prevent the test to start the monitor- and task_registrator-threads:
-    engine_.task_registrator.registration_thread = True
-    engine_.monitor_thread = True
-
-    result = engine_.start(TEST_DB_NAME)
-    time.sleep(0.02)  # give db some time
-    assert result is True
-
-    # try to start with worker_master False:
-    interface.is_worker_master = False
-    result = engine_.start(TEST_DB_NAME)
-    assert result is False
-
-
 def test_start_and_stop_workerprocess():
     """
     Test to start and terminate a subprocess.

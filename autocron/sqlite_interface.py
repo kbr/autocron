@@ -2,11 +2,14 @@
 import datetime
 import pathlib
 import pickle
+import queue
 import sqlite3
+import threading
 import time
 
 
 DEFAULT_STORAGE = ".autocron"
+REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
 
 SQLITE_OPERATIONAL_ERROR_RETRIES = 100
 SQLITE_OPERATIONAL_ERROR_DELAY = 0.01
@@ -331,17 +334,37 @@ class Result(Model):
         later after executing the function. ttl is set to default and
         gets updated when the result is updated.
         """
-        data = {
+        data = self._get_data_dict(func, args, kwargs, uuid=uuid)
+        super().store(data)
+
+    @staticmethod
+    def _get_data_dict(func, args, kwargs, uuid="",
+                       status=TASK_STATUS_WAITING,
+                       function_result=None, error_message=""):
+        return {
             "uuid": uuid,
-            "status": TASK_STATUS_WAITING,
+            "status": status,
             "function_module": func.__module__,
             "function_name": func.__name__,
             "function_arguments": pickle.dumps((args, kwargs)),
-            "function_result": pickle.dumps(None),
-            "error_message": "",
+            "function_result": pickle.dumps(function_result),
+            "error_message": error_message,
             "ttl": SETTINGS_DEFAULT_RESULT_TTL
         }
-        super().store(data)
+
+    @classmethod
+    def from_registration(cls, func, args, kwargs, uuid="",
+                          status=TASK_STATUS_WAITING,
+                          function_result=None, error_message=""):
+        """
+        Return a new instance with the given arguments as attributes.
+        """
+        data = cls._get_data_dict(
+            func, args, kwargs, uuid=uuid, status=status,
+            function_result=function_result, error_message=error_message)
+        result = cls()
+        result.__dict__.update(data)
+        return result
 
 
 class Settings(Model):
@@ -378,6 +401,78 @@ class Settings(Model):
         data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
                 for name, value in zip(column_names, row)}
         return data
+
+
+class TaskRegistrator:
+    """
+    Handles the task registration in a separate thread so that
+    registration is a non-blocking operation.
+    """
+
+    def __init__(self, interface):
+        self.interface = interface
+        self.task_queue = queue.Queue()
+        self.exit_event = threading.Event()
+        self.registration_thread = None
+
+    def register(self, func, schedule=None, crontab="", uuid="",
+                       args=(), kwargs=None, unique=False):
+        """
+        Register a task for later processing. Arguments are the same as
+        for `SQLiteInterface.register_task()` which is called from a
+        seperate thread.
+        """
+        if kwargs is None:
+            kwargs = {}
+        self.task_queue.put({
+            "func": func,
+            "schedule": schedule,
+            "crontab": crontab,
+            "uuid": uuid,
+            "args": args,
+            "kwargs": kwargs,
+            "unique": unique
+        })
+
+    def _process_queue(self):
+        """
+        Register task in a separate thread taking the tasks from a
+        task_queue.
+        """
+        while True:
+            try:
+                data = self.task_queue.get(
+                    timeout=REGISTER_BACKGROUND_TASK_TIMEOUT
+                )
+            except queue.Empty:
+                # check for exit_event on empty queue so the queue items
+                # can get handled before terminating the thread
+                if self.exit_event.is_set():
+                    break
+            else:
+                # got a task for registration:
+                # The data is a dict with the locals() from self.register()
+                # excluding "self".
+                self.interface.register_task(**data)
+
+    def start(self):
+        """
+        Start processing the queue in a seperate thread.
+        """
+        # don't start multiple threads
+        if self.registration_thread is None:
+            self.registration_thread = threading.Thread(
+                target=self._process_queue
+            )
+            self.registration_thread.start()
+
+    def stop(self):
+        """
+        Terminates the running registration thread.
+        """
+        if self.registration_thread:
+            self.exit_event.set()
+            self.registration_thread = None
 
 
 class SQLiteConnection:
@@ -458,12 +553,14 @@ class SQLiteInterface:
         self._result_ttl = None
         self._accept_registrations = True
         self._db_name = None
-        self.autocron_lock_is_set = None
+        self.autocron_lock = None
         self.worker_idle_time = None
         self.monitor_idle_time = None
         # if set this process controls the workers
         self.is_worker_master = False
         self.max_workers = SETTINGS_DEFAULT_WORKERS
+        # the registrator for non blocking registration:
+        self.registrator = TaskRegistrator(self)
 
     @property
     def db_name(self):
@@ -524,7 +621,7 @@ class SQLiteInterface:
 
                 # read settings that don't change during runtime:
                 settings.read()
-                self.autocron_lock_is_set = settings.autocron_lock
+                self.autocron_lock = settings.autocron_lock
                 self.max_workers = settings.max_workers
                 self.worker_idle_time = settings.worker_idle_time
                 self.monitor_idle_time = settings.monitor_idle_time
@@ -532,7 +629,7 @@ class SQLiteInterface:
 
                 # try to aquire the monitor_lock flag in case
                 # autocron is active:
-                if not self.autocron_lock_is_set:
+                if not self.autocron_lock:
                     if settings.monitor_lock is False:
                         settings.update(monitor_lock=True)
                         # this process handles the workers
@@ -603,7 +700,7 @@ class SQLiteInterface:
             return Task.read_all(conn)
 
     @db_access
-    def shut_down_process(self):
+    def tear_down_database(self):
         """
         Reset all settings here so that the workers don't have to access
         the database again on shutdown.

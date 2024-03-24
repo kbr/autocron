@@ -7,7 +7,13 @@ process.
 import uuid
 
 from .schedule import CronScheduler
-from .sqlite_interface import SQLiteInterface
+from .sqlite_interface import (
+    TASK_STATUS_WAITING,
+    TASK_STATUS_READY,
+    TASK_STATUS_ERROR,
+    Result,
+    SQLiteInterface
+)
 
 
 # default: run every minute:
@@ -97,24 +103,24 @@ def cron(crontab=None,
         crontab = DEFAULT_CRONTAB
 
     def wrapper(func):
-        if interface.accept_registrations:
-            scheduler = CronScheduler(
-                minutes=minutes,
-                hours=hours,
-                days=days,
-                months=months,
-                days_of_week=days_of_week,
-                crontab=crontab
-            )
-            schedule = scheduler.get_next_schedule()
-            interface.task_registrator.register(
-                func,
-                schedule=schedule,
-                crontab=crontab,
-                unique=True  # don't register cron-tasks twice
-            )
+        # send the function to the registerer. The contas will get registered
+        # when autocron starts. If autocron is not active nothing bad happens.
+        scheduler = CronScheduler(
+            minutes=minutes,
+            hours=hours,
+            days=days,
+            months=months,
+            days_of_week=days_of_week,
+            crontab=crontab
+        )
+        schedule = scheduler.get_next_schedule()
+        interface.registrator.register(
+            func,
+            schedule=schedule,
+            crontab=crontab,
+            unique=True  # don't register cron-tasks twice
+        )
         return func
-
     return wrapper
 
 
@@ -129,25 +135,44 @@ def delay(func):
     The decorator does not take any arguments. Calling ``sendmail()``
     will return from the call immediately and this callable will get
     executed later in another process.
+
+    In any case the decorated function will return a Result-instance. If
+    autocron is active the result will be in waiting mode and may not be
+    in the database because the dataset gets created in a separate
+    thread.
+
+    If autocron is not active, the result-instance will be in ready- or
+    error-mode, depending on the function call.
     """
-
     def wrapper(*args, **kwargs):
-        if interface.accept_registrations:
-            # active: return TaskResult in waiting state
-            uid = uuid.uuid4().hex
-            data = {"args": args, "kwargs": kwargs, "uuid": uid}
-            interface.task_registrator.register(func, **data)
-            result = TaskResult.from_registration(func, **data)
-        elif interface.autocron_lock_is_set:
-            # inactive: return TaskResult in ready state
-            # by calling the wrapped function. This will keep the
-            # type of the returned value consistant for the application.
-            result = TaskResult.from_function_call(func, *args, **kwargs)
+        # the wrapper will not get called during import time.
+        # at runtime the database is initialized and it is safe
+        # to check the settings:
+        if interface.autocron_lock:
+            # inactive: call the function and return a Result-instance
+            # in ready- or error-state:
+            try:
+                function_result = func(*args, **kwargs)
+            except Exception as err:
+                error_message = str(err)
+                status = TASK_STATUS_ERROR
+            else:
+                error_message = ""
+                status = TASK_STATUS_READY
+            result = Result.from_registration(
+                func, args, kwargs, status=status,
+                function_result=function_result,
+                error_message=error_message
+            )
         else:
-            # active but registration not allowed.
-            # this is the wrapper as seen by a worker process:
-            # return result from the original callable
-            result = func(*args, **kwargs)
+            # active: register in task_queue and return a Result-instance
+            # in waiting-state:
+            uuid_ = uuid.uuid4().hex
+            interface.registrator.register(
+                func, args=args, kwargs=kwargs, uuid=uuid_
+            )
+            result = Result.from_registration(
+                func, args, kwargs, uuid=uuid_, status=TASK_STATUS_WAITING
+            )
         return result
-
     return wrapper
