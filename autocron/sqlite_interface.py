@@ -162,7 +162,8 @@ class Model:
     def update(self, id_name=None, id_value=None, **kwargs):
         """
         Updates the fields given as keyword arguments with the
-        corresponding values. `id_name` is the column name to use for selection
+        corresponding values. `id_name` is the column name to use for
+        selection.
         """
         if id_name is None:
             id_name = "rowid"
@@ -328,6 +329,18 @@ class Result(Model):
         "ttl": "datetime"
     }
 
+    @property
+    def is_waiting(self):
+        """Returns True if status is TASK_STATUS_WAITING else returns False.
+        """
+        return self.status == TASK_STATUS_WAITING
+
+    @property
+    def has_error(self):
+        """Returns True if the error message is not empty.
+        """
+        return bool(self.error_message)
+
     def store(self, func, uuid, args=(), kwargs=None):
         """
         Stores a new entry in the result table waiting to get updated
@@ -360,8 +373,13 @@ class Result(Model):
         Return a new instance with the given arguments as attributes.
         """
         data = cls._get_data_dict(
-            func, args, kwargs, uuid=uuid, status=status,
-            function_result=function_result, error_message=error_message)
+            func, args, kwargs,
+            uuid=uuid,
+            status=status,
+            error_message=error_message
+        )
+        # overwrite pickle(None) with the given result
+        data["function_result"] = function_result
         result = cls()
         result.__dict__.update(data)
         return result
@@ -478,8 +496,9 @@ class TaskRegistrator:
 class SQLiteConnection:
     """
     SQLite connection. `run()` can get called as often as required. The
-    database keeps connected. Leaving the context will close the
-    database connection.
+    database keeps connected. Leaving the context will commit and close
+    the database connection. In case of an exception during the context
+    instead of a commit the connection will do a rollback.
     """
 
     def __init__(self, db_name, row_factory=None, exclusive=False):
@@ -684,6 +703,13 @@ class SQLiteInterface:
                 return None
             task.update(status=TASK_STATUS_PROCESSING)
             return task
+
+    @db_access
+    def count_results(self):
+        """Return the number of entries in the task-table.
+        """
+        with Connection(self.db_name) as conn:
+            return Result.count_rows(conn)
 
     @db_access
     def count_tasks(self):

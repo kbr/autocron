@@ -156,6 +156,7 @@ def delay(func):
             except Exception as err:
                 error_message = str(err)
                 status = TASK_STATUS_ERROR
+                function_result = None
             else:
                 error_message = ""
                 status = TASK_STATUS_READY
