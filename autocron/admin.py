@@ -6,13 +6,9 @@ Administration tool to access the database.
 
 import argparse
 
-from autocron.sql_interface import (
+from autocron.sqlite_interface import (
     SQLiteInterface,
-    DEFAULT_MAX_WORKERS,
-    DEFAULT_RUNNING_WORKERS,
-    DEFAULT_MONITOR_LOCK,
-    DEFAULT_AUTOCRON_LOCK,
-    DEFAULT_RESULT_TTL,
+    SETTINGS_DEFAULT_DATA,
 )
 
 interface = SQLiteInterface()
@@ -102,11 +98,11 @@ def print_usage():
 def reset_defaults():
     """Reset the settings with the default values."""
     settings = interface.get_settings()
-    settings.max_workers = DEFAULT_MAX_WORKERS
-    settings.running_workers = DEFAULT_RUNNING_WORKERS
-    settings.monitor_lock = DEFAULT_MONITOR_LOCK
-    settings.autocron_lock = DEFAULT_AUTOCRON_LOCK
-    settings.result_ttl = DEFAULT_RESULT_TTL
+    settings.max_workers = SETTINGS_DEFAULT_MAX_WORKERS
+    settings.running_workers = SETTINGS_DEFAULT_RUNNING_WORKERS
+    settings.monitor_lock = SETTINGS_DEFAULT_MONITOR_LOCK
+    settings.autocron_lock = SETTINGS_DEFAULT_AUTOCRON_LOCK
+    settings.result_ttl = SETTINGS_DEFAULT_RESULT_TTL
     interface.set_settings(settings)
     print("\nReset settings default values:")
     report_info()

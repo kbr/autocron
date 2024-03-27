@@ -23,9 +23,9 @@ SETTINGS_DEFAULT_RUNNING_WORKERS = 0
 SETTINGS_DEFAULT_MONITOR_LOCK = 0
 SETTINGS_DEFAULT_AUTOCRON_LOCK = 0
 SETTINGS_DEFAULT_MONITOR_IDLE_TIME = 5  # seconds
-SETTINGS_DEFAULT_WORKER_IDLE_TIME = 0  # 0 seconds means auto idle time
+SETTINGS_DEFAULT_WORKER_IDLE_TIME = 1  # 0 seconds means auto idle time
 SETTINGS_DEFAULT_WORKER_PIDS = ""
-SETTINGS_DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) in seconds
+SETTINGS_DEFAULT_RESULT_TTL = 800  # Storage time (time to live) in seconds
 
 SETTINGS_DEFAULT_DATA = {
     "max_workers": SETTINGS_DEFAULT_WORKERS,
@@ -231,6 +231,27 @@ class Task(Model):
         "function_arguments": "BLOB"
     }
 
+    def __init__(
+        self,
+        connection=None,
+        func=None,
+        args=(),
+        kwargs=None,
+        uuid="",
+        crontab="",
+        schedule=None,
+        status=TASK_STATUS_WAITING
+    ):
+        super().__init__(connection=connection)
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.uuid = uuid
+        self.crontab = crontab
+        self.schedule = schedule
+        self.status = status
+
+
     def get_sql_tasks_on_due(self):
         sql = self.get_sql_read_all_columns()
         return f"""{sql} WHERE schedule <= :schedule
@@ -270,24 +291,20 @@ class Task(Model):
         sql = self.get_sql_crontasks_on_due()
         return self._get_next_task_on_due(sql, schedule)
 
-    def store(self, func, schedule=None, crontab="", uuid="",
-              args=(), kwargs=None):
+    def store(self):
         """
-        Store a new task in the database and return the rowid of the
-        created entry.
+        Store a new task in the database.
         """
-        if schedule is None:
-            schedule = datetime.datetime.now()
-        data = {
-            "uuid": uuid,
-            "schedule": schedule,
-            "status": TASK_STATUS_WAITING,
-            "crontab": crontab,
-            "function_module": func.__module__,
-            "function_name": func.__name__,
-            "function_arguments": pickle.dumps((args, kwargs))
-        }
-        super().store(data)
+        if self.schedule is None:
+            self.schedule = datetime.datetime.now()
+        if self.func:
+            self.function_module = self.func.__module__
+            self.function_name = self.func.__name__
+        else:
+            self.function_module = ""
+            self.function_name = ""
+        self.function_arguments = pickle.dumps((self.args, self.kwargs))
+        super().store(self.__dict__)
 
     @classmethod
     def delete_crontasks(cls, connection):
@@ -329,6 +346,28 @@ class Result(Model):
         "ttl": "datetime"
     }
 
+    def __init__(
+        self,
+        connection=None,
+        func=None,
+        args=(),
+        kwargs=None,
+        function_result=None,
+        error_message="",
+        uuid="",
+        ttl=SETTINGS_DEFAULT_RESULT_TTL,
+        status=TASK_STATUS_WAITING,
+        function_name = "",
+        function_module = "",
+        function_arguments = None,
+        rowid = None
+    ):
+        # store all arguments as instance attributes:
+        super().__init__(connection=connection)
+        for name, value in locals().items():
+            if name not in ("self", "connection"):
+                self.__dict__[name] = value
+
     @property
     def is_waiting(self):
         """Returns True if status is TASK_STATUS_WAITING else returns False.
@@ -341,29 +380,18 @@ class Result(Model):
         """
         return bool(self.error_message)
 
-    def store(self, func, uuid, args=(), kwargs=None):
+    def store(self):
+        """Stores the result as a new entry in the result table.
         """
-        Stores a new entry in the result table waiting to get updated
-        later after executing the function. ttl is set to default and
-        gets updated when the result is updated.
-        """
-        data = self._get_data_dict(func, args, kwargs, uuid=uuid)
-        super().store(data)
-
-    @staticmethod
-    def _get_data_dict(func, args, kwargs, uuid="",
-                       status=TASK_STATUS_WAITING,
-                       function_result=None, error_message=""):
-        return {
-            "uuid": uuid,
-            "status": status,
-            "function_module": func.__module__,
-            "function_name": func.__name__,
-            "function_arguments": pickle.dumps((args, kwargs)),
-            "function_result": pickle.dumps(function_result),
-            "error_message": error_message,
-            "ttl": SETTINGS_DEFAULT_RESULT_TTL
-        }
+        if self.func:
+            self.function_module = self.func.__module__
+            self.function_name = self.func.__name__
+        else:
+            self.function_module = ""
+            self.function_name = ""
+        self.function_arguments = pickle.dumps((self.args, self.kwargs))
+        self.function_result = pickle.dumps(self.function_result)
+        super().store(self.__dict__)
 
     @classmethod
     def from_registration(cls, func, args, kwargs, uuid="",
@@ -372,17 +400,52 @@ class Result(Model):
         """
         Return a new instance with the given arguments as attributes.
         """
-        data = cls._get_data_dict(
-            func, args, kwargs,
-            uuid=uuid,
-            status=status,
+        return cls(
+            func=func, args=args, kwargs=kwargs, uuid=uuid,
+            function_result=function_result,status=status,
             error_message=error_message
         )
-        # overwrite pickle(None) with the given result
-        data["function_result"] = function_result
-        result = cls()
-        result.__dict__.update(data)
-        return result
+
+    @classmethod
+    def from_uuid(cls, connection, uuid):
+        """
+        Returns a Result instance from the database with the given uuid.
+        If there is no entry return None.
+        """
+        sql = cls.get_sql_read_all_columns(cls)
+        sql = f"{sql} WHERE uuid == :uuid"
+        cursor = connection.run(sql, {"uuid": uuid})
+        cursor.row_factory = cls.row_factory
+        data = cursor.fetchone()
+        if data:
+            return cls(**data)
+        return None
+
+    @classmethod
+    def delete_outdated(cls, connection, schedule):
+        """
+        Delete all result entries where the ttl is <= schedule.
+        (ttl is a datetime object and works as a timestamp for storage.)
+        """
+        sql = f"""DELETE FROM {cls.table_name}
+                  WHERE status <> {TASK_STATUS_WAITING}
+                  AND ttl <= :ttl"""
+        connection.run(sql, {"ttl": schedule})
+
+    @staticmethod
+    def row_factory(cursor, row):
+        """
+        SQLite factory class to convert a row from the result-table to a
+        dictionary.
+        """
+        data = {}
+        column_names = [entry[0] for entry in cursor.description]
+        for name, value in zip(column_names, row):
+            if name in ("function_arguments", "function_result"):
+                data[name] = pickle.loads(value)
+            else:
+                data[name] = value
+        return data
 
 
 class Settings(Model):
@@ -569,9 +632,9 @@ class SQLiteInterface:
         # run __init__ just on the first instance
         if self.__dict__:
             return
-        self._result_ttl = None
-        self._accept_registrations = True
         self._db_name = None
+        self._result_ttl = None
+        self.accept_registrations = True
         self.autocron_lock = None
         self.worker_idle_time = None
         self.monitor_idle_time = None
@@ -663,6 +726,8 @@ class SQLiteInterface:
                     new_status=TASK_STATUS_WAITING
                 )
 
+
+
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
                       args=(), kwargs=None, unique=False):
@@ -671,19 +736,35 @@ class SQLiteInterface:
         callable is a delayed task with a potential result create also a
         corresponding entry in the result table.
         """
-        if not schedule:
-            schedule = datetime.datetime.now()
-        if kwargs is None:
-            kwargs = {}
-        with Connection(self.db_name, exclusive=True) as conn:
-            task = Task(conn)
-            task.store(func, schedule, crontab, uuid, args, kwargs)
+        if self.accept_registrations:
+            if not schedule:
+                schedule = datetime.datetime.now()
+            if kwargs is None:
+                kwargs = {}
+            with Connection(self.db_name, exclusive=True) as conn:
+                task = Task(
+                    connection=conn,
+                    func=func,
+                    schedule=schedule,
+                    crontab=crontab,
+                    uuid=uuid,
+                    args=args,
+                    kwargs=kwargs
+                )
+                task.store()
 
-            # if a uuid is given it is a delayed function that
-            # may return a result:
-            if uuid:
-                result = Result(conn)
-                result.store(func, uuid, args, kwargs)
+                # if a uuid is given it is a delayed function that
+                # may return a result:
+                if uuid:
+                    result = Result(
+                        connection=conn,
+                        func=func,
+                        args=args,
+                        kwargs=kwargs,
+                        uuid=uuid,
+                        ttl=self.result_ttl
+                    )
+                    result.store()
 
     @db_access
     def get_next_task(self):
@@ -705,11 +786,13 @@ class SQLiteInterface:
             return task
 
     @db_access
-    def count_results(self):
-        """Return the number of entries in the task-table.
+    def update_task_schedule(self, task, schedule):
+        """Updates the schedule of the given task.
         """
         with Connection(self.db_name) as conn:
-            return Result.count_rows(conn)
+            task.connection = conn
+            task.update(schedule=schedule)
+        print(task.schedule, schedule)
 
     @db_access
     def count_tasks(self):
@@ -724,6 +807,107 @@ class SQLiteInterface:
         """
         with Connection(self.db_name) as conn:
             return Task.read_all(conn)
+
+    @db_access
+    def delete_task(self, task):
+        """Delete the task which may not have a valid connection-attribute.
+        """
+        # solution: inject a valid connection
+        with Connection(self.db_name) as conn:
+            task.connection = conn
+            task.delete()
+
+    @db_access
+    def get_result_by_uuid(self, uuid):
+        """
+        Return a Result instance from the database identified by the uuid.
+        """
+        with Connection(self.db_name) as conn:
+            return Result.from_uuid(connection=conn, uuid=uuid)
+
+    @db_access
+    def count_results(self):
+        """Return the number of entries in the task-table.
+        """
+        with Connection(self.db_name) as conn:
+            return Result.count_rows(conn)
+
+    @db_access
+    def update_result(
+        self,
+        uuid,
+        result=None,
+        error_message="",
+        status=None,
+        ttl=None
+    ):
+        """
+        Updates the result with the uuid with the values of the
+        arguments result and error_message. If the status is None status
+        will be set to TASK_STATUS_READY if the error_message is an
+        empty string, otherwise to TASK_STATUS_ERROR. If ttl is None ttl
+        will be set to now() + SETTINGS_DEFAULT_RESULT_TTL.
+        """
+        function_result = pickle.dumps(result)
+        if status is None:
+            status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
+        if ttl is None:
+            ttl = self.result_ttl
+        with Connection(self.db_name) as conn:
+            result = Result(conn)
+            result.update(
+                id_name="uuid",
+                id_value=uuid,
+                function_result=function_result,
+                error_message=error_message,
+                status=status,
+                ttl=ttl
+            )
+
+    @db_access
+    def delete_outdated_results(self):
+        """Delete all resuts with a ttl <= now.
+        """
+        with Connection(self.db_name) as conn:
+            Result.delete_outdated(conn, datetime.datetime.now())
+
+    @db_access
+    def increment_running_workers(self, pid):
+        """
+        Add the pid to the worker pid-list and increase the running
+        worker num by 1.
+        """
+        with Connection(self.db_name) as conn:
+            settings = Settings(connection=conn)
+            settings.read()
+            if settings.worker_pids:
+                pids = f"{settings.worker_pids},{pid}"
+            else:
+                pids = str(pid)
+            workers = settings.running_workers + 1
+            settings.update(running_workers=workers, worker_pids=pids)
+
+    @db_access
+    def decrement_running_workers(self, pid):
+        """
+        Delete the pid from the worker_pids list and decrement the
+        running_workers counter.
+        """
+        with Connection(self.db_name) as conn:
+            settings = Settings(connection=conn)
+            settings.read()
+            pids = settings.worker_pids.split(",")
+            try:
+                pids.remove(str(pid))
+            except ValueError:
+                # pid not in list: ignore
+                pass
+            else:
+                worker_pids = ",".join(pids)
+                settings.update(
+                    running_workers=len(pids),
+                    worker_pids=worker_pids
+                )
 
     @db_access
     def tear_down_database(self):

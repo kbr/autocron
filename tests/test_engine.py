@@ -1,7 +1,7 @@
 """
 test_engine.py
 
-tests for the engine and the worker.
+tests for the engine.
 """
 
 import pathlib
@@ -13,7 +13,6 @@ import pytest
 
 from autocron import engine
 from autocron import sqlite_interface
-from autocron import worker
 
 
 TEST_DB_NAME = "test.db"

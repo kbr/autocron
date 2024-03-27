@@ -11,7 +11,7 @@ import sys
 import time
 
 from autocron.schedule import CronScheduler
-from autocron import sql_interface
+from autocron import sqlite_interface
 
 
 DEFAULT_WORKER_IDLE_TIME = 1  # base idle time for auto-calculation
@@ -35,10 +35,11 @@ class Worker:
         # to initialized-state. So no new tasks are registered
         # from a worker.
         # (keep in mind that every worker runs in a separate process.)
-        self.interface = sql_interface.SQLiteInterface()
+        self.interface = sqlite_interface.SQLiteInterface()
         self.interface.db_name=database_filename
         self.interface.accept_registrations = False
-        self.worker_idle_time = self._get_worker_idle_time()
+        self.worker_idle_time = self.interface.worker_idle_time
+#         self.worker_idle_time = self._get_worker_idle_time()
 
     def _get_worker_idle_time(self):
         """
@@ -48,9 +49,9 @@ class Worker:
         numbers of workers to keep the sqlite database accessible and
         reactive.
         """
-        idle_time = self.interface.get_worker_idle_time()
+        idle_time = self.interface.worker_idle_time
         if not idle_time:
-            workers = self.interface.get_max_workers()
+            workers = self.interface.max_workers
             idle_time = DEFAULT_WORKER_IDLE_TIME
             idle_time += workers // AUTO_WORKER_INCREMENT_STEP
         return idle_time
@@ -70,18 +71,19 @@ class Worker:
         pid = os.getpid()
         self.interface.increment_running_workers(pid)
         while self.active:
-            if not self.handle_tasks():
+            if not self.handle_task():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-                # don't check the database again for
-                # self.worker_idle_time (which is an integer in seconds)
-                # but wakeup every second the check for termination
-                for _ in range(self.worker_idle_time * 10):
-                    if not self.active:
-                        break
-                    time.sleep(DEFAULT_WORKER_IDLE_TIME / 10)
+                time.sleep(self.worker_idle_time)
+#                 # don't check the database again for
+#                 # self.worker_idle_time (which is an integer in seconds)
+#                 # but wake up ten times in between to check for termination
+#                 for _ in range(self.worker_idle_time * 10):
+#                     if not self.active:
+#                         break
+#                     time.sleep(DEFAULT_WORKER_IDLE_TIME / 10)
 
-    def handle_tasks(self):
+    def handle_task(self):
         """
         Checks for a task on due and process the task. If there are no tasks to
         handle the method return `False` indicating that the main loop
