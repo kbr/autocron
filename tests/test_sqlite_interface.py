@@ -27,8 +27,10 @@ TEST_DB_NAME = "test.db"
 def tst_function(*args, **kwargs):
     return args, kwargs
 
+
 def tst_cron_function():
     return None
+
 
 def tst_add_function(a, b):
     return a + b
@@ -78,40 +80,65 @@ def test_storage_location(db_name, parent_dir, raw_interface):
     assert parent_dir == parent.stem
 
 
-def test_init_database(raw_interface):
+def test_init_database(interface):
     """
-    Should set the standard settings on a new database.
-    Implicit testing .store()
+    Initialize with and without settings.
     """
-    raw_interface.init_database(TEST_DB_NAME)
-    with Connection(raw_interface.db_name) as conn:
+    # init_database has created the db and set the default settings
+    # autocron_lock should now be False and no longer None
+    assert interface.autocron_lock is False
+
+    # check for the settings entry in the database
+    with Connection(interface.db_name) as conn:
         rows = Settings.count_rows(conn)
         assert rows == 1
 
 
-def test_update_settings(raw_interface):
+def test_worker_master(raw_interface):
     """
-    Test the .update() method on Model. Implicit testing.read()
+    init_database should also set the worker_master attribute
+    """
+    interface = raw_interface  # take used naming
+    assert interface.is_worker_master is None
+
+    # after init_database the is_worker_master should be True
+    # because monitor_lock has been False by default
+    # (allowing the monitor to start)
+    interface.init_database(TEST_DB_NAME)
+    assert interface.is_worker_master is True
+
+    # reset db_name but don't delete the database.
+    # calling init_database again should set the is_worker_master
+    # to False.
+    interface.db_name = None
+    interface.init_database(TEST_DB_NAME)
+    assert interface.is_worker_master is False
+
+
+def test_update_settings(interface):
+    """
+    Test the .update() method on Model.
     """
     max_workers = 2
-    raw_interface.init_database(TEST_DB_NAME)
-    with Connection(raw_interface.db_name) as conn:
-        settings = Settings(conn)
-        settings.read()
+    with Connection(interface.db_name) as conn:
+        settings = Settings.select_all(conn)[0]
         assert settings.max_workers == SETTINGS_DEFAULT_WORKERS
+
+        # check this because otherwise the test makes no sense:
+        assert max_workers != SETTINGS_DEFAULT_WORKERS
         settings.max_workers = max_workers
-        settings.update(max_workers=max_workers)
-        settings.read()
+        settings.update()
+
+    with Connection(interface.db_name) as conn:
+        settings = Settings.select_all(conn)[0]
         assert settings.max_workers == max_workers
-        # also the 'worker_master' should be True
-        assert raw_interface.is_worker_master is True
-        assert settings.monitor_lock is True
 
 
-def test_store_and_read_task(interface):
+def test_crud_task(interface):
     """
-    Store a task and read the data with the correct datatypes.
+    Make the crud test on the model using a task.
     """
+    # C: create with attributes
     schedule = datetime.datetime(2000, 1, 1)
     args = (3.14, "test", 42)
     kwargs = {"pi": 3.14159, "a": 42, 10: "b"}
@@ -122,32 +149,40 @@ def test_store_and_read_task(interface):
         )
         task.store()
 
-    # after storage the task should get returned by read_next_task()
-    schedule = datetime.datetime.now()
-    with Connection(interface.db_name) as conn:
-        task = Task(conn)
-        success = task.read_next_task(schedule)
-        assert success is task
-        assert task.args == args
-        assert task.kwargs == kwargs
+    # after storage the task should have a rowid attribute
+    rowid = task.rowid
 
-
-def test_delete_task(interface):
-    """
-    Delete a task.
-    """
+    # R: read by rowid and check for correct attribute-reading
     with Connection(interface.db_name) as conn:
-        task = Task(conn, func=tst_function)
-        task.store()
-        assert Task.count_rows(conn) == 1
+        task = Task.select(conn, rowid=rowid)
+    assert task.schedule == schedule
+    assert task.args == args
+    assert task.kwargs == kwargs
+    assert task.crontab == ""
+    assert task.uuid == ""
+    assert task.function_module == tst_function.__module__
+    assert task.function_name == tst_function.__name__
+
+    # U: update a selected attribute:
+    now = datetime.datetime.now()
+    task.schedule = now
+    with Connection(interface.db_name) as conn:
+        task.connection = conn
+        task.update()
+    with Connection(interface.db_name) as conn:
+        task = Task.select(conn, rowid=rowid)
+    assert task.schedule == now
+
+    # D: delete the task:
+    with Connection(interface.db_name) as conn:
+        task.connection = conn
         task.delete()
+    with Connection(interface.db_name) as conn:
         assert Task.count_rows(conn) == 0
 
 
 def test_delete_task_via_interface(interface):
-    """
-    Delete a task via an interface-method. The task given as argument
-    may no longer have a valid connection attribute.
+    """Delete a task via an interface-method.
     """
     with Connection(interface.db_name) as conn:
         task = Task(conn, func=tst_function)
@@ -187,6 +222,29 @@ def test_register_delayed_task(interface):
 
 def test_get_next_task(interface):
     """
+    Test to just return a task on due.
+    """
+    now = datetime.datetime.now()
+    delta = datetime.timedelta(hours=1)
+
+    # add a task that is not on due:
+    with Connection(interface.db_name) as conn:
+        task = Task(connection=conn, func=tst_function, schedule=now+delta)
+        task.store()
+    next_task = interface.get_next_task()
+    assert next_task is None
+
+    # add a task that is on due:
+    with Connection(interface.db_name) as conn:
+        task = Task(connection=conn, func=tst_add_function, schedule=now-delta)
+        task.store()
+    next_task = interface.get_next_task()
+    assert next_task is not None
+    assert next_task.function_name == tst_add_function.__name__
+
+
+def test_get_next_task_priority(interface):
+    """
     Returns the next task on due and crontasks first.
     """
     delta = datetime.timedelta(hours=1)
@@ -194,7 +252,7 @@ def test_get_next_task(interface):
     interface.register_task(
         tst_cron_function, crontab="*", schedule=now - 2 * delta)
     interface.register_task(
-        tst_function, crontab="*", schedule=now - delta)
+        tst_function, uuid="*", schedule=now - delta)
     interface.register_task(
         tst_add_function, crontab="*", schedule=now + delta)
 
@@ -212,27 +270,6 @@ def test_get_next_task(interface):
     assert task is None
 
 
-def test_update_task_schedule(interface):
-    """
-    Test to update the schedule of a given task.
-    """
-    now = datetime.datetime.now()
-    then = now + datetime.timedelta(hours=1)
-    with Connection(interface.db_name) as conn:
-        task = Task(conn, func=tst_function, schedule=now)
-        task.store()
-
-    # there is a single entry in the database.
-    # check for the old schedule
-    task = interface.get_tasks()[0]
-    assert task.schedule == now
-
-    # update and check for the new schedule:
-    interface.update_task_schedule(task, then)
-    task = interface.get_tasks()[0]
-    assert task.schedule == then
-
-
 def test_delete_outdated_results(interface):
     """
     Test to store and delete results.
@@ -242,10 +279,10 @@ def test_delete_outdated_results(interface):
     with Connection(interface.db_name) as conn:
         outdated = Result(conn, func=tst_function, uuid=uuid.uuid4().hex)
         outdated.store()
-        old = Result(conn, func=tst_function, uuid=uuid.uuid4().hex)
-        old.store()
-        survivor = Result(conn, func=tst_function, uuid=uuid.uuid4().hex)
-        survivor.store()
+        also_outdated = Result(conn, func=tst_function, uuid=uuid.uuid4().hex)
+        also_outdated.store()
+        not_outdated = Result(conn, func=tst_function, uuid=uuid.uuid4().hex)
+        not_outdated.store()
     assert interface.count_results() == 3
 
     # nothing will happen because no result is outdated
@@ -253,12 +290,13 @@ def test_delete_outdated_results(interface):
     assert interface.count_results() == 3
 
     # now update the results as it will happen by the workers:
+    interface.update_result(uuid=not_outdated.uuid)
     interface.update_result(uuid=outdated.uuid, ttl=now-delta)
-    interface.update_result(uuid=old.uuid, ttl=now-delta)
-    interface.update_result(uuid=survivor.uuid)
+    interface.update_result(uuid=also_outdated.uuid, ttl=now-delta)
 
+    assert interface.count_results() == 3  # as before
     interface.delete_outdated_results()
-    assert interface.count_results() == 1
+    assert interface.count_results() == 1  # but now two have been deleted
 
 
 def test_increment_running_workers(interface):
@@ -272,8 +310,7 @@ def test_increment_running_workers(interface):
 
     # check for correct setup
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == str(first_pid)
     assert settings.running_workers == running_workers
 
@@ -285,8 +322,7 @@ def test_increment_running_workers(interface):
     worker_pids = f"{first_pid},{new_pid}"
     running_workers += 1
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == worker_pids
     assert settings.running_workers == running_workers
 
@@ -299,18 +335,16 @@ def test_decrement_running_workers(interface):
     worker_pids = "123,456,789"
     running_workers = 3
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
-        settings.update(
-            running_workers=running_workers, worker_pids=worker_pids
-        )
+        settings = Settings.read(connection=conn)
+        settings.running_workers=running_workers
+        settings.worker_pids=worker_pids
+        settings.update()
 
     # do the modification: delete pid 456
     pid = 456
     interface.decrement_running_workers(pid=pid)
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == "123,789"
     assert settings.running_workers == 2
 
@@ -318,8 +352,7 @@ def test_decrement_running_workers(interface):
     pid = 42
     interface.decrement_running_workers(pid=pid)
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == "123,789"
     assert settings.running_workers == 2
 
@@ -327,8 +360,7 @@ def test_decrement_running_workers(interface):
     interface.decrement_running_workers(pid="123")
     interface.decrement_running_workers(pid="789")
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == ""
     assert settings.running_workers == 0
 
@@ -336,7 +368,6 @@ def test_decrement_running_workers(interface):
     # (should be covered by ignoring unknown pids):
     interface.decrement_running_workers(pid="23")
     with Connection(interface.db_name) as conn:
-        settings = Settings(connection=conn)
-        settings.read()
+        settings = Settings.read(connection=conn)
     assert settings.worker_pids == ""
     assert settings.running_workers == 0

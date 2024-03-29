@@ -124,12 +124,8 @@ class Engine:
         if self.interface.autocron_lock:
             return result
 
-        # init the database first to try to aquire the monitor lock
-        # for becoming the worker master:
+        # init the database first:
         self.interface.init_database(database_file)
-
-        # start the registrator thread to populate the database:
-        self.interface.registrator.start()
 
         # start the monitor thread if the process is the worker master
         # but dont't start the monitor twice:
@@ -139,6 +135,9 @@ class Engine:
             self.monitor_thread = threading.Thread(target=self.worker_monitor)
             self.monitor_thread.start()
             result = True
+
+        # start the registrator thread to populate the database:
+        self.interface.registrator.start()
         return result
 
     def stop(self):

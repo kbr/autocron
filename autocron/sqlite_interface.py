@@ -20,12 +20,12 @@ SQLITE_EXCLUSIVE_ACCESS = "BEGIN EXCLUSIVE"
 
 SETTINGS_DEFAULT_WORKERS = 1
 SETTINGS_DEFAULT_RUNNING_WORKERS = 0
-SETTINGS_DEFAULT_MONITOR_LOCK = 0
-SETTINGS_DEFAULT_AUTOCRON_LOCK = 0
+SETTINGS_DEFAULT_MONITOR_LOCK = False
+SETTINGS_DEFAULT_AUTOCRON_LOCK = False
 SETTINGS_DEFAULT_MONITOR_IDLE_TIME = 5  # seconds
 SETTINGS_DEFAULT_WORKER_IDLE_TIME = 1  # 0 seconds means auto idle time
 SETTINGS_DEFAULT_WORKER_PIDS = ""
-SETTINGS_DEFAULT_RESULT_TTL = 800  # Storage time (time to live) in seconds
+SETTINGS_DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) in seconds
 
 SETTINGS_DEFAULT_DATA = {
     "max_workers": SETTINGS_DEFAULT_WORKERS,
@@ -105,117 +105,100 @@ class Model:
         self.connection = connection
         self.rowid = None
 
-    def get_sql_create_table(self):
-        columns = ",".join(
-            f"{name} {datatype}" for name, datatype in self.columns.items()
-        )
-        return f"CREATE TABLE IF NOT EXISTS {self.table_name}({columns})"
-
-    def get_sql_store_all_columns(self):
-        """Returns the sql to store all columns of a table in named style.
-        """
-        columns = ",".join(
-            f":{name}" for name in self.columns.keys()
-        )
-        return f"""INSERT INTO {self.table_name} VALUES ({columns})
-                   RETURNING rowid"""
-
-    def get_sql_update(self, columns, id_name):
-        """
-        Returns the sql required to update the given columns (a list of
-        strings). id_name is column name used as key and id_value is the
-        corresonding value.
-        """
-        columns = ",".join(f"{name} = :{name}" for name in columns)
-        return f"""UPDATE {self.table_name} SET {columns}
-                   WHERE {id_name} == :id_value"""
-
-    def get_sql_read_all_columns(self):
-        """
-        Returns the sql to read all columns from a given table including
-        the sqlite specific rowid.
-        """
-        # should also read the rowid, so SELECT * FROM can't be used
-        columns = list(self.columns.keys())
-        columns.append("rowid")
-        columns = ",".join(columns)
-        return f"SELECT {columns} FROM {self.table_name}"
-
-    def get_sql_delete(self):
-        """Returns the sql to delete an entry based on the rowid.
-        """
-        return f"DELETE FROM {self.table_name} WHERE rowid == {self.rowid}"
-
-    def store(self, data):
+    def store(self):
         """
         Store a new row. data is a dictionary with all column data.
         After storage the instance-attribute `rowid` will be set.
         """
-        sql = self.get_sql_store_all_columns()
-        cursor = self.connection.run(sql, data)
+        columns = ",".join(f":{name}" for name in self.columns.keys())
+        sql = f"""INSERT INTO {self.table_name} VALUES ({columns})
+                  RETURNING rowid"""
+        cursor = self.connection.run(sql, self.__dict__)
         result = cursor.fetchone()
         # result is a tuple representing the RETURNING values
-        # from the sql command. In this case it is tuple with
+        # from the sql command. In this case it is a tuple with
         # a single entry holding the new created rowid:
         self.rowid = result[0]
+        return self.rowid
 
-    def update(self, id_name=None, id_value=None, **kwargs):
+    def update(self):
+        """Make the current set of attributes persistent.
         """
-        Updates the fields given as keyword arguments with the
-        corresponding values. `id_name` is the column name to use for
-        selection.
-        """
-        if id_name is None:
-            id_name = "rowid"
-        if id_value is None:
-            id_value = self.rowid
-        sql = self.get_sql_update(kwargs.keys(), id_name)
-        kwargs["id_value"] = id_value
-        self.connection.run(sql, parameters=kwargs)
+        columns = ",".join(f"{name} = :{name}" for name in self.columns.keys())
+        sql = f"""UPDATE {self.table_name} SET {columns}
+                  WHERE rowid == :rowid"""
+        self.connection.run(sql, self.__dict__)
 
     def delete(self):
-        """Delete the item from the database-table.
+        """Delete this instance by the rowid.
         """
-        self.connection.run(self.get_sql_delete())
+        sql = f"DELETE FROM {self.table_name} WHERE rowid == {self.rowid}"
+        self.connection.run(sql)
+
+    @classmethod
+    def _get_sql_select(cls):
+        """Helper function for the select-classmethods.
+        """
+        columns = list(cls.columns.keys())
+        columns.append("rowid")
+        columns = ",".join(columns)
+        return f"SELECT {columns} FROM {cls.table_name}"
+
+    @classmethod
+    def select(cls, connection, rowid=None, sql=None, data=None):
+        """
+        Returns an instance depending on the arguments or None if no
+        entry matches. If just `rowid` is given makes a lookup by the
+        `rowid`. Otherwise `sql` and `data` must be given to make
+        specific selection.
+        """
+        if rowid is not None:
+            # simple select by rowid
+            sql = cls._get_sql_select()
+            sql = f"{sql} WHERE rowid == :rowid"
+            data = {"rowid": rowid}
+        cursor = connection.run(sql, data)
+        cursor.row_factory = getattr(cls, "row_factory", None)
+        data = cursor.fetchone()
+        instance = None
+        if data:
+            instance = cls(connection)
+            instance.__dict__.update(data)
+        return instance
+
+    @classmethod
+    def select_all(cls, connection):
+        """
+        Select all entries from a table and returns a list of
+        model-instances. If there is no entry in the table an empty list
+        is returned.
+        """
+        sql = cls._get_sql_select()
+        cursor = connection.run(sql)
+        cursor.row_factory = getattr(cls, "row_factory", None)
+        data_set = cursor.fetchall()
+        instances = []
+        for data in data_set:
+            instance = cls(connection)
+            instance.__dict__.update(data)
+            instances.append(instance)
+        return instances
 
     @classmethod
     def create_table(cls, connection):
-        sql = cls.get_sql_create_table(cls)
-        connection.run(sql)
+        columns = ",".join(
+            f"{field} {type}" for field, type in cls.columns.items()
+        )
+        connection.run(
+            f"CREATE TABLE IF NOT EXISTS {cls.table_name}({columns})"
+        )
 
     @classmethod
     def count_rows(cls, connection):
         """Return the number of rows in the table.
         """
-        sql = f"SELECT COUNT(*) FROM {cls.table_name}"
-        cursor = connection.run(sql)
-        rows = cursor.fetchone()[0]
-        return rows
-
-    @classmethod
-    def read_all(cls, connection):
-        """
-        Returns a list of entries from the table-class. The
-        connection-attribute is set to None because it would be invalide
-        anyway.
-        """
-        sql = cls.get_sql_read_all_columns(cls)
-        cursor = connection.run(sql)
-        cursor.row_factory = cls.row_factory
-        entries = []
-        for data in cursor.fetchall():
-            entry = cls()
-            entry.__dict__.update(data)
-            entries.append(entry)
-        return entries
-
-    @classmethod
-    def change_status(cls, connection, prev_status, new_status):
-        """Change status of all entries from a given status to a new one.
-        """
-        sql = f"""UPDATE {cls.table_name} SET status = :new_status
-                  WHERE status == :prev_status"""
-        connection.run(sql, locals())
+        cursor = connection.run(f"SELECT COUNT(*) FROM {cls.table_name}")
+        return cursor.fetchone()[0]
 
 
 class Task(Model):
@@ -251,46 +234,6 @@ class Task(Model):
         self.schedule = schedule
         self.status = status
 
-
-    def get_sql_tasks_on_due(self):
-        sql = self.get_sql_read_all_columns()
-        return f"""{sql} WHERE schedule <= :schedule
-                   AND status == {TASK_STATUS_WAITING}"""
-
-    def get_sql_crontasks_on_due(self):
-        sql = self.get_sql_tasks_on_due()
-        return f"{sql} AND crontab <> ''"
-
-    def get_sql_select_by_status(self):
-        sql = self.get_sql_read_all_columns()
-        return f"{sql} WHERE status == :status"
-
-    def _get_next_task_on_due(self, sql, schedule):
-        parameters = {"schedule": schedule}
-        cursor = self.connection.run(sql, parameters=parameters)
-        cursor.row_factory = self.row_factory
-        data = cursor.fetchone()
-        if not data:
-            return None
-        self.__dict__.update(data)
-        return self
-
-    def read_next_task(self, schedule):
-        """
-        Reads the data of the next task into the instance. Returns the
-        instance or None, if no task on has been found.
-        """
-        sql = self.get_sql_tasks_on_due()
-        return self._get_next_task_on_due(sql, schedule)
-
-    def read_next_crontask(self, schedule):
-        """
-        Reads the data of the next crontask into the instance. Returns
-        the instance or None, if no task on has been found.
-        """
-        sql = self.get_sql_crontasks_on_due()
-        return self._get_next_task_on_due(sql, schedule)
-
     def store(self):
         """
         Store a new task in the database.
@@ -304,7 +247,40 @@ class Task(Model):
             self.function_module = ""
             self.function_name = ""
         self.function_arguments = pickle.dumps((self.args, self.kwargs))
-        super().store(self.__dict__)
+        super().store()
+
+    def update(self):
+        """
+        Make the current state of attributes persistent.
+        """
+        # function arguments may have changed:
+        self.function_arguments = pickle.dumps((self.args, self.kwargs))
+        super().update()
+
+    @classmethod
+    def _get_next_task_sql_and_data(cls):
+        """Helper method for next_task and next_cron_task.
+        """
+        sql = cls._get_sql_select()
+        sql = f"""{sql} WHERE schedule <= :schedule
+                  AND status == {TASK_STATUS_WAITING}"""
+        data = {"schedule": datetime.datetime.now()}
+        return sql, data
+
+    @classmethod
+    def next_task(cls, connection):
+        """
+        Returns a new task instance which is on due. The status get
+        changed from TASK_STATUS_WAITING to TASK_STATUS_PROCESSING.
+        """
+        sql, data = cls._get_next_task_sql_and_data()
+        return cls.select(connection, sql=sql, data=data)
+
+    @classmethod
+    def next_cron_task(cls, connection):
+        sql, data = cls._get_next_task_sql_and_data()
+        sql = f"{sql} AND crontab <> ''"
+        return cls.select(connection, sql=sql, data=data)
 
     @classmethod
     def delete_crontasks(cls, connection):
@@ -312,6 +288,13 @@ class Task(Model):
         """
         sql = f"DELETE FROM {cls.table_name} WHERE crontab <> ''"
         connection.run(sql)
+
+    @classmethod
+    def change_status(cls, connection, prev_status, new_status):
+        sql = f"""UPDATE {cls.table_name} SET status = :new_status
+                  WHERE status == :prev_status"""
+        data = {"prev_status": prev_status, "new_status": new_status}
+        connection.run(sql, data)
 
     @staticmethod
     def row_factory(cursor, row):
@@ -355,15 +338,19 @@ class Result(Model):
         function_result=None,
         error_message="",
         uuid="",
-        ttl=SETTINGS_DEFAULT_RESULT_TTL,
         status=TASK_STATUS_WAITING,
+        ttl=None,
         function_name = "",
         function_module = "",
         function_arguments = None,
         rowid = None
     ):
-        # store all arguments as instance attributes:
         super().__init__(connection=connection)
+        # store all arguments as instance attributes.
+        if ttl is None:
+            # ttl must be of type datetime. The real value gets set
+            # when the result is updated by a worker.
+            ttl = datetime.datetime.now()
         for name, value in locals().items():
             if name not in ("self", "connection"):
                 self.__dict__[name] = value
@@ -391,7 +378,7 @@ class Result(Model):
             self.function_name = ""
         self.function_arguments = pickle.dumps((self.args, self.kwargs))
         self.function_result = pickle.dumps(self.function_result)
-        super().store(self.__dict__)
+        super().store()
 
     @classmethod
     def from_registration(cls, func, args, kwargs, uuid="",
@@ -412,14 +399,10 @@ class Result(Model):
         Returns a Result instance from the database with the given uuid.
         If there is no entry return None.
         """
-        sql = cls.get_sql_read_all_columns(cls)
+        sql = cls._get_sql_select()
         sql = f"{sql} WHERE uuid == :uuid"
-        cursor = connection.run(sql, {"uuid": uuid})
-        cursor.row_factory = cls.row_factory
-        data = cursor.fetchone()
-        if data:
-            return cls(**data)
-        return None
+        data = {"uuid": uuid}
+        return cls.select(connection, sql=sql, data=data)
 
     @classmethod
     def delete_outdated(cls, connection, schedule):
@@ -462,15 +445,28 @@ class Settings(Model):
         "result_ttl": "INTEGER"
     }
 
-    def read(self):
-        """Read the settings from the single entry in this table.
+    def __init__(self, connection=None, data=None):
         """
-        sql = self.get_sql_read_all_columns()
-        cursor = self.connection.run(sql)
-        cursor.row_factory = self.row_factory
-        data = cursor.fetchone()
+        Initializes settings with the values from data. data must be a
+        dictionary with key value pairs according the `columns` class
+        attribute. If data is not given the
+        SETTINGS_DEFAULT_DATA-dictionary is used to populate the
+        settings data.
+        """
+        super().__init__(connection)
+        data = data if data else SETTINGS_DEFAULT_DATA
         self.__dict__.update(data)
-        return self
+
+    @classmethod
+    def read(cls, connection):
+        """
+        Returns a settings instance with data read from the database. If
+        there is no settings entry in the table returns None.
+        """
+        entries = cls.select_all(connection)
+        if not entries:
+            return None
+        return entries[0]
 
     @staticmethod
     def row_factory(cursor, row):
@@ -635,12 +631,18 @@ class SQLiteInterface:
         self._db_name = None
         self._result_ttl = None
         self.accept_registrations = True
+        # attributes later set by settings:
         self.autocron_lock = None
-        self.worker_idle_time = None
+        self.monitor_lock = None
         self.monitor_idle_time = None
-        # if set this process controls the workers
-        self.is_worker_master = False
-        self.max_workers = SETTINGS_DEFAULT_WORKERS
+        self.max_workers = None
+        self.worker_idle_time = None
+        # is_worker_master is True if this is the process where
+        # the engine also monitors the workers.
+        # if is_worker_master is False another process is responsible
+        # for the workers. If autocron_lock is True the is_worker_master
+        # keeps the value None.
+        self.is_worker_master = None
         # the registrator for non blocking registration:
         self.registrator = TaskRegistrator(self)
 
@@ -696,37 +698,39 @@ class SQLiteInterface:
                 Result.create_table(conn)
                 Settings.create_table(conn)
 
-                # set default settings if no settings stored:
-                settings = Settings(conn)
-                if not Settings.count_rows(conn):
-                    settings.store(SETTINGS_DEFAULT_DATA)
+                # try to read the settings. If this fails create the first
+                # (and only) settings dataset with the default values:
+                settings = Settings.read(conn)
+                if settings is None:
+                    settings = Settings(conn)  # this set the defaults
+                    settings.store()  # store defaults in the database
 
-                # read settings that don't change during runtime:
-                settings.read()
+                # set attributes from settings that don't change during runtime:
                 self.autocron_lock = settings.autocron_lock
+                self.monitor_lock = settings.monitor_lock
+                self.monitor_idle_time = settings.monitor_idle_time
                 self.max_workers = settings.max_workers
                 self.worker_idle_time = settings.worker_idle_time
-                self.monitor_idle_time = settings.monitor_idle_time
                 self.result_ttl = settings.result_ttl
 
                 # try to aquire the monitor_lock flag in case
-                # autocron is active:
+                # autocron is active and becoming the worker_master:
                 if not self.autocron_lock:
-                    if settings.monitor_lock is False:
-                        settings.update(monitor_lock=True)
-                        # this process handles the workers
+                    if not self.monitor_lock:
+                        # aquire the lock and update settings
                         self.is_worker_master = True
+                        settings.monitor_lock = True
+                        settings.update()
+                    else:
+                        self.is_worker_master = False
 
-                # tasks from the last run in processing state and therefor
-                # not finished are reset to waiting mode to get executed
-                # again.
+                # reset the status of unfinished tasks from the
+                # last run to handle them again:
                 Task.change_status(
                     conn,
                     prev_status=TASK_STATUS_PROCESSING,
                     new_status=TASK_STATUS_WAITING
                 )
-
-
 
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
@@ -773,17 +777,12 @@ class SQLiteInterface:
         there is not task on due. If a task is returned the status is
         set to TASK_STATUS_PROCESSING first.
         """
-        schedule = datetime.datetime.now()
         with Connection(self.db_name, exclusive=True) as conn:
-            task = Task(conn)
-            for task_getter in (task.read_next_crontask, task.read_next_task):
-                found = task_getter(schedule)
-                if found:
-                    break
-            else:
-                return None
-            task.update(status=TASK_STATUS_PROCESSING)
-            return task
+            task = Task.next_cron_task(conn) or Task.next_task(conn)
+            if task:
+                task.status = TASK_STATUS_PROCESSING
+                task.update()
+        return task
 
     @db_access
     def update_task_schedule(self, task, schedule):
@@ -806,7 +805,7 @@ class SQLiteInterface:
         """Return a list of all tasks.
         """
         with Connection(self.db_name) as conn:
-            return Task.read_all(conn)
+            return Task.select_all(conn)
 
     @db_access
     def delete_task(self, task):
@@ -838,31 +837,23 @@ class SQLiteInterface:
         uuid,
         result=None,
         error_message="",
-        status=None,
         ttl=None
     ):
         """
         Updates the result with the uuid with the values of the
-        arguments result and error_message. If the status is None status
-        will be set to TASK_STATUS_READY if the error_message is an
-        empty string, otherwise to TASK_STATUS_ERROR. If ttl is None ttl
-        will be set to now() + SETTINGS_DEFAULT_RESULT_TTL.
+        arguments result and error_message.
         """
         function_result = pickle.dumps(result)
-        if status is None:
-            status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
-        if ttl is None:
-            ttl = self.result_ttl
+        ttl = ttl if ttl else self.result_ttl
+        status = TASK_STATUS_ERROR if error_message else TASK_STATUS_READY
         with Connection(self.db_name) as conn:
-            result = Result(conn)
-            result.update(
-                id_name="uuid",
-                id_value=uuid,
-                function_result=function_result,
-                error_message=error_message,
-                status=status,
-                ttl=ttl
-            )
+            result = Result.from_uuid(conn, uuid=uuid)
+            result.function_result = function_result
+            result.function_arguments = pickle.dumps(result.function_arguments)
+            result.error_message = error_message
+            result.status = status
+            result.ttl = ttl
+            result.update()
 
     @db_access
     def delete_outdated_results(self):
@@ -878,14 +869,10 @@ class SQLiteInterface:
         worker num by 1.
         """
         with Connection(self.db_name) as conn:
-            settings = Settings(connection=conn)
-            settings.read()
-            if settings.worker_pids:
-                pids = f"{settings.worker_pids},{pid}"
-            else:
-                pids = str(pid)
-            workers = settings.running_workers + 1
-            settings.update(running_workers=workers, worker_pids=pids)
+            settings = Settings.read(connection=conn)
+            settings.worker_pids = f"{settings.worker_pids},{pid}".lstrip(",")
+            settings.running_workers += 1
+            settings.update()
 
     @db_access
     def decrement_running_workers(self, pid):
@@ -894,8 +881,7 @@ class SQLiteInterface:
         running_workers counter.
         """
         with Connection(self.db_name) as conn:
-            settings = Settings(connection=conn)
-            settings.read()
+            settings = Settings.read(connection=conn)
             pids = settings.worker_pids.split(",")
             try:
                 pids.remove(str(pid))
@@ -903,11 +889,9 @@ class SQLiteInterface:
                 # pid not in list: ignore
                 pass
             else:
-                worker_pids = ",".join(pids)
-                settings.update(
-                    running_workers=len(pids),
-                    worker_pids=worker_pids
-                )
+                settings.worker_pids = ",".join(pids)
+                settings.running_workers = len(pids)
+                settings.update()
 
     @db_access
     def tear_down_database(self):
@@ -918,11 +902,9 @@ class SQLiteInterface:
         # gets called from the engine in case the interface
         # is the worker_master
         with Connection(self.db_name) as conn:
-            settings = Settings(conn)
-            settings.read()
-            settings.update(
-                monitor_lock=False,
-                running_workers=0,
-                worker_pids=""
-            )
+            settings = Settings.read(conn)
+            settings.monitor_lock = False
+            settings.running_workers = 0
+            settings.worker_pids = ""
+            settings.update()
             Task.delete_crontasks(conn)

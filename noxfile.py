@@ -16,7 +16,7 @@ def test(session):
 
 
 # for position arguments run:
-# $ nox -s test-3.11 -- testfile
+# $ nox -s pytest-3.11 -- testfile
 @nox.session(python=PYTHON_TEST_VERSIONS)
 def pytest(session):
     session.install("-e", ".")
