@@ -15,7 +15,6 @@ from autocron import sqlite_interface
 
 
 DEFAULT_WORKER_IDLE_TIME = 1  # base idle time for auto-calculation
-AUTO_WORKER_INCREMENT_STEP = 16
 
 
 class Worker:
@@ -32,14 +31,12 @@ class Worker:
         # Get a SQLiteInterface instance 'as is' without the
         # initialization step to clean up tasks.
         # Providing the databasename will set the database
-        # to initialized-state. So no new tasks are registered
-        # from a worker.
-        # (keep in mind that every worker runs in a separate process.)
+        # to an initialized-state.
         self.interface = sqlite_interface.SQLiteInterface()
-        self.interface.db_name=database_filename
+        self.interface.init_database(database_filename, from_worker=True)
+        # prevent the interface to register functions from the worker-process:
         self.interface.accept_registrations = False
-        self.worker_idle_time = self.interface.worker_idle_time
-#         self.worker_idle_time = self._get_worker_idle_time()
+        self.worker_idle_time = self._get_worker_idle_time()
 
     def _get_worker_idle_time(self):
         """
@@ -48,18 +45,21 @@ class Worker:
         active workers. A higher idle time is necessary on higher
         numbers of workers to keep the sqlite database accessible and
         reactive.
+        auto_idle time keeps 1 second for up to 8 workers. Then it adds
+        0.025 seconds per additional worker.
         """
         idle_time = self.interface.worker_idle_time
         if not idle_time:
             workers = self.interface.max_workers
-            idle_time = DEFAULT_WORKER_IDLE_TIME
-            idle_time += workers // AUTO_WORKER_INCREMENT_STEP
+            default = DEFAULT_WORKER_IDLE_TIME
+            idle_time = max(default, default + 0.025 * (workers - 8))
         return idle_time
 
     def terminate(self, *args):  # pylint: disable=unused-argument
         """
         Signal handler to stop the process, terminates the loop in
-        `run()`.
+        `run()`. As a signal handler terminate must accept optional
+        positional arguments.
         """
         self.active = False
 
@@ -74,14 +74,18 @@ class Worker:
             if not self.handle_task():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-                time.sleep(self.worker_idle_time)
-#                 # don't check the database again for
-#                 # self.worker_idle_time (which is an integer in seconds)
-#                 # but wake up ten times in between to check for termination
-#                 for _ in range(self.worker_idle_time * 10):
-#                     if not self.active:
-#                         break
-#                     time.sleep(DEFAULT_WORKER_IDLE_TIME / 10)
+#                 time.sleep(2.0)
+#                 continue
+
+                # don't sleep too long in case of longer idle-times
+                # wake up at least every second to check for self.active
+                # to terminate as soon as possible:
+                idle_time = self.worker_idle_time
+                while idle_time > 0:
+                    time.sleep(min(1, idle_time))
+                    if not self.active:
+                        break
+                    idle_time -= 1
 
     def handle_task(self):
         """

@@ -687,9 +687,11 @@ class SQLiteInterface:
         self._result_ttl = datetime.timedelta(seconds=value)
 
     @db_access
-    def init_database(self, db_name):
+    def init_database(self, db_name, from_worker=False):
         """
         Set the database name and set up initial data.
+        The workers have to skip some steps and must set the
+        `from_worker` flag to True.
         """
         if not self.db_name:
             self.db_name = db_name
@@ -713,24 +715,27 @@ class SQLiteInterface:
                 self.worker_idle_time = settings.worker_idle_time
                 self.result_ttl = settings.result_ttl
 
-                # try to aquire the monitor_lock flag in case
-                # autocron is active and becoming the worker_master:
-                if not self.autocron_lock:
-                    if not self.monitor_lock:
-                        # aquire the lock and update settings
-                        self.is_worker_master = True
-                        settings.monitor_lock = True
-                        settings.update()
-                    else:
-                        self.is_worker_master = False
+                # if the method has not been called from a worker,
+                # then do some addional initialization:
+                if not from_worker:
+                    # try to aquire the monitor_lock flag in case
+                    # autocron is active and becoming the worker_master:
+                    if not self.autocron_lock:
+                        if not self.monitor_lock:
+                            # aquire the lock and update settings
+                            self.is_worker_master = True
+                            settings.monitor_lock = True
+                            settings.update()
+                        else:
+                            self.is_worker_master = False
 
-                # reset the status of unfinished tasks from the
-                # last run to handle them again:
-                Task.change_status(
-                    conn,
-                    prev_status=TASK_STATUS_PROCESSING,
-                    new_status=TASK_STATUS_WAITING
-                )
+                    # reset the status of unfinished tasks from the
+                    # last run to handle them again:
+                    Task.change_status(
+                        conn,
+                        prev_status=TASK_STATUS_PROCESSING,
+                        new_status=TASK_STATUS_WAITING
+                    )
 
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
@@ -790,8 +795,8 @@ class SQLiteInterface:
         """
         with Connection(self.db_name) as conn:
             task.connection = conn
-            task.update(schedule=schedule)
-        print(task.schedule, schedule)
+            task.schedule = schedule
+            task.update()
 
     @db_access
     def count_tasks(self):
