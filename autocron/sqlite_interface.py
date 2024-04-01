@@ -250,8 +250,7 @@ class Task(Model):
         super().store()
 
     def update(self):
-        """
-        Make the current state of attributes persistent.
+        """Make the current state of attributes persistent.
         """
         # function arguments may have changed:
         self.function_arguments = pickle.dumps((self.args, self.kwargs))
@@ -269,15 +268,15 @@ class Task(Model):
 
     @classmethod
     def next_task(cls, connection):
-        """
-        Returns a new task instance which is on due. The status get
-        changed from TASK_STATUS_WAITING to TASK_STATUS_PROCESSING.
+        """Returns a task instance which is on due.
         """
         sql, data = cls._get_next_task_sql_and_data()
         return cls.select(connection, sql=sql, data=data)
 
     @classmethod
     def next_cron_task(cls, connection):
+        """Returns a crontask instance which is on due.
+        """
         sql, data = cls._get_next_task_sql_and_data()
         sql = f"{sql} AND crontab <> ''"
         return cls.select(connection, sql=sql, data=data)
@@ -456,6 +455,15 @@ class Settings(Model):
         super().__init__(connection)
         data = data if data else SETTINGS_DEFAULT_DATA
         self.__dict__.update(data)
+
+    def __str__(self):
+        """Self representation used by the admin-tool.
+        """
+        attributes = []
+        for key in self.columns.keys():
+            value = self.__dict__[key]
+            attributes.append(f"{key}:{value}")
+        return "\n".join(attributes)
 
     @classmethod
     def read(cls, connection):
@@ -897,6 +905,23 @@ class SQLiteInterface:
                 settings.worker_pids = ",".join(pids)
                 settings.running_workers = len(pids)
                 settings.update()
+
+    @db_access
+    def get_settings(self):
+        """Returns the settings dataset.
+        """
+        with Connection(self.db_name) as conn:
+            return Settings.read(connection=conn)
+
+
+    @db_access
+    def set_settings(self, settings):
+        """Returns the settings dataset.
+        """
+        with Connection(self.db_name) as conn:
+            settings.connection = conn
+            settings.update()
+
 
     @db_access
     def tear_down_database(self):

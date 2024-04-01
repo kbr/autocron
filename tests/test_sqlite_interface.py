@@ -87,6 +87,7 @@ def test_init_database(interface):
     # init_database has created the db and set the default settings
     # autocron_lock should now be False and no longer None
     assert interface.autocron_lock is False
+    assert interface.monitor_lock is False
 
     # check for the settings entry in the database
     with Connection(interface.db_name) as conn:

@@ -69,25 +69,25 @@ def _report_tasks(tasks, task_type="tasks"):
     print()
 
 
-def report_tasks():
-    """Report all stored tasks."""
-    _report_tasks(interface.get_tasks())
-
-
-def report_tasks_on_due():
-    """Report all tasks waiting for execution and are on due."""
-    _report_tasks(interface.get_tasks_on_due())
-
-
-def report_cron_tasks():
-    """Report all task which are cron-jobs."""
-    _report_tasks(interface.get_crontasks())
-
-
-def report_results():
-    """Report all available results."""
-    results = interface.get_results()
-    _report_tasks(results, task_type="results")
+# def report_tasks():
+#     """Report all stored tasks."""
+#     _report_tasks(interface.get_tasks())
+#
+#
+# def report_tasks_on_due():
+#     """Report all tasks waiting for execution and are on due."""
+#     _report_tasks(interface.get_tasks_on_due())
+#
+#
+# def report_cron_tasks():
+#     """Report all task which are cron-jobs."""
+#     _report_tasks(interface.get_crontasks())
+#
+#
+# def report_results():
+#     """Report all available results."""
+#     results = interface.get_results()
+#     _report_tasks(results, task_type="results")
 
 
 def print_usage():
@@ -160,16 +160,16 @@ def _convert_flag(flag):
 
 def set_monitor_lock(flag):
     """Set monitor_lock flag."""
-    flag = _convert_flag(flag)
-    interface.set_monitor_lock_flag(flag)
+    settings = interface.get_settings()
+    interface.monitor_lock = _convert_flag(flag)
+    interface.set_settings(settings)
     print(f"Set monitor lock to {flag}")
 
 
 def set_autocron_lock(flag):
     """Set autocron_lock flag."""
-    flag = _convert_flag(flag)
     settings = interface.get_settings()
-    settings.autocron_lock = flag
+    settings.autocron_lock = _convert_flag(flag)
     interface.set_settings(settings)
     print(f"Set autocron lock to {flag}")
 
@@ -292,14 +292,14 @@ def main(args=None):
         reset_defaults()
     elif args.max_workers:
         set_max_workers(args.max_workers)
-    elif args.get_tasks:
-        report_tasks()
-    elif args.get_tasks_on_due:
-        report_tasks_on_due()
-    elif args.get_cron_tasks:
-        report_cron_tasks()
-    elif args.get_results:
-        report_results()
+#     elif args.get_tasks:
+#         report_tasks()
+#     elif args.get_tasks_on_due:
+#         report_tasks_on_due()
+#     elif args.get_cron_tasks:
+#         report_cron_tasks()
+#     elif args.get_results:
+#         report_results()
     elif args.delete_database:
         delete_database()
     elif args.monitor_lock:
