@@ -33,7 +33,7 @@ class Worker:
         # Providing the databasename will set the database
         # to an initialized-state.
         self.interface = sqlite_interface.SQLiteInterface()
-        self.interface.init_database(database_filename, from_worker=True)
+        self.interface.init_database(database_filename)
         # prevent the interface to register functions from the worker-process:
         self.interface.accept_registrations = False
         self.worker_idle_time = self._get_worker_idle_time()
@@ -74,9 +74,6 @@ class Worker:
             if not self.handle_task():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
-#                 time.sleep(2.0)
-#                 continue
-
                 # don't sleep too long in case of longer idle-times
                 # wake up at least every second to check for self.active
                 # to terminate as soon as possible:
@@ -86,6 +83,8 @@ class Worker:
                     if not self.active:
                         break
                     idle_time -= 1
+        # shutdown:
+        self.interface.decrement_running_workers(pid)
 
     def handle_task(self):
         """

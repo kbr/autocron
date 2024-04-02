@@ -85,35 +85,14 @@ def test_init_database(interface):
     Initialize with and without settings.
     """
     # init_database has created the db and set the default settings
-    # autocron_lock should now be False and no longer None
-    assert interface.autocron_lock is False
-    assert interface.monitor_lock is False
-
     # check for the settings entry in the database
     with Connection(interface.db_name) as conn:
         rows = Settings.count_rows(conn)
         assert rows == 1
 
-
-def test_worker_master(raw_interface):
-    """
-    init_database should also set the worker_master attribute
-    """
-    interface = raw_interface  # take used naming
-    assert interface.is_worker_master is None
-
-    # after init_database the is_worker_master should be True
-    # because monitor_lock has been False by default
-    # (allowing the monitor to start)
-    interface.init_database(TEST_DB_NAME)
-    assert interface.is_worker_master is True
-
-    # reset db_name but don't delete the database.
-    # calling init_database again should set the is_worker_master
-    # to False.
-    interface.db_name = None
-    interface.init_database(TEST_DB_NAME)
-    assert interface.is_worker_master is False
+    settings = interface.get_settings()
+    assert settings.autocron_lock is False
+    assert settings.monitor_lock is False
 
 
 def test_update_settings(interface):
@@ -133,6 +112,29 @@ def test_update_settings(interface):
     with Connection(interface.db_name) as conn:
         settings = Settings.select_all(conn)[0]
         assert settings.max_workers == max_workers
+
+
+def test_acquire_monitor_lock(interface):
+    """Test to set the monitor_lock flag.
+    """
+    # after initialization the monito_lock flag is False,
+    # therefor acquisition is possible:
+    settings = interface.get_settings()
+    assert settings.monitor_lock is False
+    result = interface.acquire_monitor_lock()
+    assert result is True
+
+    # monitor_lock has been set to True:
+    settings = interface.get_settings()
+    assert settings.monitor_lock is True
+
+    # no acquisition is no longer possible:
+    result = interface.acquire_monitor_lock()
+    assert result is False
+
+    # and the flag has not changed:
+    settings = interface.get_settings()
+    assert settings.monitor_lock is True
 
 
 def test_crud_task(interface):
@@ -372,3 +374,20 @@ def test_decrement_running_workers(interface):
         settings = Settings.read(connection=conn)
     assert settings.worker_pids == ""
     assert settings.running_workers == 0
+
+
+@pytest.mark.parametrize(
+    "pids, pid, expected_result", [
+        ("123,456,789,1012,1024,300,4578", 456, True),
+        ("123,456,789,1012,1024,300,4578", 301, False),
+        ("", 987652, False),
+    ]
+)
+def test_is_worker_pid(pids, pid, expected_result, interface):
+    with Connection(interface.db_name) as conn:
+        settings = Settings.read(connection=conn)
+        settings.worker_pids = pids
+        settings.update()
+    result = interface.is_worker_pid(pid)
+    assert result == expected_result
+

@@ -23,7 +23,7 @@ SETTINGS_DEFAULT_RUNNING_WORKERS = 0
 SETTINGS_DEFAULT_MONITOR_LOCK = False
 SETTINGS_DEFAULT_AUTOCRON_LOCK = False
 SETTINGS_DEFAULT_MONITOR_IDLE_TIME = 5  # seconds
-SETTINGS_DEFAULT_WORKER_IDLE_TIME = 1  # 0 seconds means auto idle time
+SETTINGS_DEFAULT_WORKER_IDLE_TIME = 0  # 0 seconds means auto idle time
 SETTINGS_DEFAULT_WORKER_PIDS = ""
 SETTINGS_DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) in seconds
 
@@ -113,6 +113,7 @@ class Model:
         columns = ",".join(f":{name}" for name in self.columns.keys())
         sql = f"""INSERT INTO {self.table_name} VALUES ({columns})
                   RETURNING rowid"""
+#         breakpoint()
         cursor = self.connection.run(sql, self.__dict__)
         result = cursor.fetchone()
         # result is a tuple representing the RETURNING values
@@ -456,13 +457,14 @@ class Settings(Model):
         data = data if data else SETTINGS_DEFAULT_DATA
         self.__dict__.update(data)
 
-    def __str__(self):
+    def __repr__(self):
         """Self representation used by the admin-tool.
         """
+        width = len(max(self.columns, key=len))
         attributes = []
-        for key in self.columns.keys():
+        for key in self.columns:
             value = self.__dict__[key]
-            attributes.append(f"{key}:{value}")
+            attributes.append(f"{key:<{width}}: {value}")
         return "\n".join(attributes)
 
     @classmethod
@@ -483,6 +485,7 @@ class Settings(Model):
         to a dictionary.
         """
         column_names = [entry[0] for entry in cursor.description]
+#         breakpoint()
         data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
                 for name, value in zip(column_names, row)}
         return data
@@ -645,12 +648,6 @@ class SQLiteInterface:
         self.monitor_idle_time = None
         self.max_workers = None
         self.worker_idle_time = None
-        # is_worker_master is True if this is the process where
-        # the engine also monitors the workers.
-        # if is_worker_master is False another process is responsible
-        # for the workers. If autocron_lock is True the is_worker_master
-        # keeps the value None.
-        self.is_worker_master = None
         # the registrator for non blocking registration:
         self.registrator = TaskRegistrator(self)
 
@@ -695,11 +692,9 @@ class SQLiteInterface:
         self._result_ttl = datetime.timedelta(seconds=value)
 
     @db_access
-    def init_database(self, db_name, from_worker=False):
+    def init_database(self, db_name):
         """
         Set the database name and set up initial data.
-        The workers have to skip some steps and must set the
-        `from_worker` flag to True.
         """
         if not self.db_name:
             self.db_name = db_name
@@ -722,28 +717,6 @@ class SQLiteInterface:
                 self.max_workers = settings.max_workers
                 self.worker_idle_time = settings.worker_idle_time
                 self.result_ttl = settings.result_ttl
-
-                # if the method has not been called from a worker,
-                # then do some addional initialization:
-                if not from_worker:
-                    # try to aquire the monitor_lock flag in case
-                    # autocron is active and becoming the worker_master:
-                    if not self.autocron_lock:
-                        if not self.monitor_lock:
-                            # aquire the lock and update settings
-                            self.is_worker_master = True
-                            settings.monitor_lock = True
-                            settings.update()
-                        else:
-                            self.is_worker_master = False
-
-                    # reset the status of unfinished tasks from the
-                    # last run to handle them again:
-                    Task.change_status(
-                        conn,
-                        prev_status=TASK_STATUS_PROCESSING,
-                        new_status=TASK_STATUS_WAITING
-                    )
 
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
@@ -907,21 +880,44 @@ class SQLiteInterface:
                 settings.update()
 
     @db_access
+    def is_worker_pid(self, pid):
+        """Check whether the provided pid is one of the worker pids.
+        """
+        with Connection(self.db_name) as conn:
+            settings = Settings.read(connection=conn)
+        pids = (int(p) for p in settings.worker_pids.split(",") if p)
+        return pid in pids
+
+    @db_access
+    def acquire_monitor_lock(self):
+        """
+        Tries to acquire the monitor-lock flag: if the flag is set to
+        False, then set it to True. Otherwise keep the flag as is.
+        Return True if the flag has been set to True, otherwise return
+        False.
+        """
+        with Connection(self.db_name, exclusive=True) as conn:
+            settings = Settings.read(connection=conn)
+            if not settings.monitor_lock:
+                settings.monitor_lock = True
+                settings.update()
+                return True
+            return False
+
+    @db_access
     def get_settings(self):
         """Returns the settings dataset.
         """
         with Connection(self.db_name) as conn:
             return Settings.read(connection=conn)
 
-
     @db_access
-    def set_settings(self, settings):
-        """Returns the settings dataset.
+    def update_settings(self, settings):
+        """Updates the settings dataset.
         """
         with Connection(self.db_name) as conn:
             settings.connection = conn
             settings.update()
-
 
     @db_access
     def tear_down_database(self):
@@ -931,10 +927,15 @@ class SQLiteInterface:
         """
         # gets called from the engine in case the interface
         # is the worker_master
-        with Connection(self.db_name) as conn:
+        with Connection(self.db_name, exclusive=True) as conn:
             settings = Settings.read(conn)
             settings.monitor_lock = False
-            settings.running_workers = 0
-            settings.worker_pids = ""
             settings.update()
             Task.delete_crontasks(conn)
+            # reset the status of unfinished tasks from the
+            # last run to handle them again:
+            Task.change_status(
+                conn,
+                prev_status=TASK_STATUS_PROCESSING,
+                new_status=TASK_STATUS_WAITING
+            )

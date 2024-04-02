@@ -7,6 +7,7 @@ function ``start(filename)`` in the ``__init__.py`` module of autocron
 handles this.
 """
 
+import os
 import pathlib
 import queue
 import signal
@@ -14,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from types import SimpleNamespace
+# from types import SimpleNamespace
 
 from .sqlite_interface import SQLiteInterface
 
@@ -65,27 +66,48 @@ class Engine:
         terminating its own thread as well.
         """
         database_file = self.interface.db_name
-        for _ in range(self.interface.max_workers):
-            process = start_subprocess(database_file)
-            self.processes.append(
-                SimpleNamespace(pid=process.pid, process=process)
-            )
-            time.sleep(WORKER_START_DELAY)
+        timeout = self.interface.monitor_idle_time
+        self.processes = [
+            start_subprocess(database_file)
+            for _ in range(self.interface.max_workers)
+        ]
         while True:
-            for entry in self.processes:
-                if entry.process.poll() is not None:
-                    # trouble: process is not running any more.
-                    # deregister the terminated process from the setting
-                    # and start a new process.
-                    self.interface.decrement_running_workers(entry.pid)
-                    new_process = start_subprocess(database_file)
-                    entry.pid = new_process.pid
-                    entry.process = new_process
-                    # in case more than one process needs a restart:
-                    time.sleep(WORKER_START_DELAY)
-            if self.exit_event.wait(timeout=self.interface.monitor_idle_time):
-                # terminate thread on exit-event:
+            for process in self.processes:
+                if process.poll() is not None:
+                    self.interface.decrement_running_workers(process.pid)
+                    self.processes.remove(process)
+                    self.processes.append(start_subprocess(database_file))
+            if self.exit_event.wait(timeout=timeout):
                 break
+
+
+#
+#         database_file = self.interface.db_name
+#         for _ in range(self.interface.max_workers):
+#             process = start_subprocess(database_file)
+#             self.processes.append(
+#                 SimpleNamespace(pid=process.pid, process=process)
+#             )
+#             time.sleep(WORKER_START_DELAY)
+#         while True:
+#             for entry in self.processes:
+#                 if entry.process.poll() is not None:
+#                     # trouble: process is not running any more.
+#                     # deregister the terminated process from the settings
+#                     # and start a new process.
+#                     self.interface.decrement_running_workers(entry.pid)
+#                     new_process = start_subprocess(database_file)
+#                     entry.pid = new_process.pid
+#                     entry.process = new_process
+#                     # in case more than one process needs a restart:
+#                     time.sleep(WORKER_START_DELAY)
+#             if self.exit_event.wait(timeout=self.interface.monitor_idle_time):
+#                 # exit from the while loop
+#                 break
+#         # terminate the workers and the thread:
+#         for entry in self.processes:
+#             entry.process.terminate()
+
 
     def set_signal_handlers(self):
         """
@@ -121,15 +143,21 @@ class Engine:
         may have be first.
         """
         result = False
+        self.interface.init_database(database_file)
         if self.interface.autocron_lock:
             return result
 
-        # init the database first:
-        self.interface.init_database(database_file)
+        # autocron is active:
+        # check whether start() has been called from a worker process
+        # (this can happen depending on the framework architecture)
+        pid = os.getpid()
+        if self.interface.is_worker_pid(pid):
+            # in this case the engine should not start
+            return result
 
-        # start the monitor thread if the process is the worker master
+        # check whether the process monitors the workers,
         # but dont't start the monitor twice:
-        if self.interface.is_worker_master and not self.monitor_thread:
+        if self.interface.acquire_monitor_lock() and not self.monitor_thread:
             self.set_signal_handlers()
             self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(target=self.worker_monitor)
@@ -143,7 +171,8 @@ class Engine:
     def stop(self):
         """
         Shut down the monitor-thread which in turn will stop all running
-        workers. Also release the monitor_lock flag.
+        workers. Also release the monitor_lock flag and prevent
+        functions from getting registered.
         """
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.
@@ -157,8 +186,9 @@ class Engine:
         self.interface.registrator.stop()
         self.interface.tear_down_database()
         # terminate the workers here in the main process:
-        for entry in self.processes:
-            entry.process.terminate()
+        for process in self.processes:
+            process.terminate()
+
 
     def _terminate(self, signalnum, stackframe=None):
         """

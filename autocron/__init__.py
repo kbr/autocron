@@ -9,7 +9,7 @@ from .decorators import (
     delay,
 )
 from .engine import Engine
-from .sql_interface import SQLiteInterface
+from .sqlite_interface import SQLiteInterface
 
 
 __all__ = ["cron", "delay", "start", "stop", "get_results"]

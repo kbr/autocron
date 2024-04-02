@@ -143,11 +143,24 @@ def delay(func):
 
     If autocron is not active, the result-instance will be in ready- or
     error-mode, depending on the function call.
+
+    However, if the code runs in a worker process, the wrapper returns
+    the result of the function call and not a Result-instance. This is
+    because in the worker process there is already a Result instance
+    available that gets updated with the result from the function call.
     """
     def wrapper(*args, **kwargs):
         # the wrapper will not get called during import time.
         # at runtime the database is initialized and it is safe
         # to check the settings:
+        if not interface.accept_registrations:
+            # this is the case when the decorated function gets called
+            # in a worker process. In this case the wrapper returns the
+            # result from the function call and not a Result instance.
+            # (the error handling is done in the worker.)
+            return func(*args, **kwargs)
+
+        # in the 'main' process autocron may be active or not:
         if interface.autocron_lock:
             # inactive: call the function and return a Result-instance
             # in ready- or error-state:
