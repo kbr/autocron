@@ -23,8 +23,6 @@ from .sqlite_interface import SQLiteInterface
 WORKER_MODULE_NAME = "worker.py"
 WORKER_START_DELAY = 0.02
 
-REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
-
 
 def start_subprocess(database_file):
     """
@@ -57,57 +55,31 @@ class Engine:
 
     def worker_monitor(self):
         """
-        Starts the worker processes and monitors that the workers are up and
-        running. Restart workers if necessary. This function must run in a
-        separate thread. The 'exit_event' is a threading.Event() instance
-        and the `database_file` is a string with an absolute or relative
-        path to the database in use. If the monitor receives an exit_event
-        the running workers are terminated and the function will return,
-        terminating its own thread as well.
+        Starts the worker processes and monitors that the workers are up
+        and running. Restart workers if necessary. This function must
+        run in a separate thread. The 'exit_event' is a
+        threading.Event() instance and the `database_file` is a string
+        with an absolute or relative path to the database in use. If the
+        monitor receives an exit_event the function will return,
+        terminating its own thread.
         """
         database_file = self.interface.db_name
         timeout = self.interface.monitor_idle_time
-        self.processes = [
-            start_subprocess(database_file)
-            for _ in range(self.interface.max_workers)
-        ]
+
+        for _ in range(self.interface.max_workers):
+            self.processes.append(start_subprocess(database_file))
+            time.sleep(WORKER_START_DELAY)
+
         while True:
             for process in self.processes:
                 if process.poll() is not None:
                     self.interface.decrement_running_workers(process.pid)
                     self.processes.remove(process)
                     self.processes.append(start_subprocess(database_file))
+                    # in case more workers need a restart:
+                    time.sleep(WORKER_START_DELAY)
             if self.exit_event.wait(timeout=timeout):
                 break
-
-
-#
-#         database_file = self.interface.db_name
-#         for _ in range(self.interface.max_workers):
-#             process = start_subprocess(database_file)
-#             self.processes.append(
-#                 SimpleNamespace(pid=process.pid, process=process)
-#             )
-#             time.sleep(WORKER_START_DELAY)
-#         while True:
-#             for entry in self.processes:
-#                 if entry.process.poll() is not None:
-#                     # trouble: process is not running any more.
-#                     # deregister the terminated process from the settings
-#                     # and start a new process.
-#                     self.interface.decrement_running_workers(entry.pid)
-#                     new_process = start_subprocess(database_file)
-#                     entry.pid = new_process.pid
-#                     entry.process = new_process
-#                     # in case more than one process needs a restart:
-#                     time.sleep(WORKER_START_DELAY)
-#             if self.exit_event.wait(timeout=self.interface.monitor_idle_time):
-#                 # exit from the while loop
-#                 break
-#         # terminate the workers and the thread:
-#         for entry in self.processes:
-#             entry.process.terminate()
-
 
     def set_signal_handlers(self):
         """
@@ -196,7 +168,8 @@ class Engine:
         Afterward reraise the signal again for the original
         signal-handler.
         """
-        # stackframe may be given to the signal-handler, but is unused
+        # a stackframe may be given to the signal-handler
+        # which is not used here.
         # pylint: disable=unused-argument
         self.stop()
         signal.signal(signalnum, self.orig_signal_handlers[signalnum])

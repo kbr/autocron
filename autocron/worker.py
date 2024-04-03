@@ -83,8 +83,6 @@ class Worker:
                     if not self.active:
                         break
                     idle_time -= 1
-        # shutdown:
-        self.interface.decrement_running_workers(pid)
 
     def handle_task(self):
         """

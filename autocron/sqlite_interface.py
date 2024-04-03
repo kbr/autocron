@@ -485,7 +485,6 @@ class Settings(Model):
         to a dictionary.
         """
         column_names = [entry[0] for entry in cursor.description]
-#         breakpoint()
         data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
                 for name, value in zip(column_names, row)}
         return data
@@ -777,6 +776,7 @@ class SQLiteInterface:
         with Connection(self.db_name) as conn:
             task.connection = conn
             task.schedule = schedule
+            task.status = TASK_STATUS_WAITING
             task.update()
 
     @db_access
@@ -930,6 +930,8 @@ class SQLiteInterface:
         with Connection(self.db_name, exclusive=True) as conn:
             settings = Settings.read(conn)
             settings.monitor_lock = False
+            settings.running_workers = 0
+            settings.worker_pids = ""
             settings.update()
             Task.delete_crontasks(conn)
             # reset the status of unfinished tasks from the
