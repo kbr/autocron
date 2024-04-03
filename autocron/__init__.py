@@ -4,6 +4,7 @@ autocron:
 simple asynchronous background task handling with no dependencies beside
 the standard-library.
 """
+
 from .decorators import (
     cron,
     delay,
@@ -12,8 +13,8 @@ from .engine import Engine
 from .sqlite_interface import SQLiteInterface
 
 
-__all__ = ["cron", "delay", "start", "stop", "get_results"]
-__version__ = "0.9.3"
+__all__ = ["cron", "delay", "start", "stop"]
+__version__ = "0.9.4"
 
 _engine = Engine()
 _interface = SQLiteInterface()
@@ -38,10 +39,3 @@ def stop():
     ``stop`` is normalwise not required.
     """
     _engine.stop()
-
-
-def get_results():
-    """
-    Returns a list with all result entries from delayed functions.
-    """
-    return _interface.get_results()

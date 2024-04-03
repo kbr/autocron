@@ -1,3 +1,13 @@
+"""
+The sqlite interface.
+
+Data models, sql-definition and access routines.
+"""
+
+# some structures are larger than pylint likes:
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-instance-attributes
+
 
 import datetime
 import pathlib
@@ -101,6 +111,10 @@ class Model:
     methods.
     """
 
+    # class attributes to redefine in subclasses:
+    table_name = ""
+    columns = {}
+
     def __init__(self, connection=None):
         self.connection = connection
         self.rowid = None
@@ -110,10 +124,9 @@ class Model:
         Store a new row. data is a dictionary with all column data.
         After storage the instance-attribute `rowid` will be set.
         """
-        columns = ",".join(f":{name}" for name in self.columns.keys())
+        columns = ",".join(f":{name}" for name in self.columns)
         sql = f"""INSERT INTO {self.table_name} VALUES ({columns})
                   RETURNING rowid"""
-#         breakpoint()
         cursor = self.connection.run(sql, self.__dict__)
         result = cursor.fetchone()
         # result is a tuple representing the RETURNING values
@@ -125,7 +138,7 @@ class Model:
     def update(self):
         """Make the current set of attributes persistent.
         """
-        columns = ",".join(f"{name} = :{name}" for name in self.columns.keys())
+        columns = ",".join(f"{name} = :{name}" for name in self.columns)
         sql = f"""UPDATE {self.table_name} SET {columns}
                   WHERE rowid == :rowid"""
         self.connection.run(sql, self.__dict__)
@@ -187,6 +200,8 @@ class Model:
 
     @classmethod
     def create_table(cls, connection):
+        """Create the database table for the model if not already existing.
+        """
         columns = ",".join(
             f"{field} {type}" for field, type in cls.columns.items()
         )
@@ -203,6 +218,8 @@ class Model:
 
 
 class Task(Model):
+    """Model to store functions for later execution.
+    """
 
     table_name = "task"
     columns = {
@@ -234,6 +251,9 @@ class Task(Model):
         self.crontab = crontab
         self.schedule = schedule
         self.status = status
+        self.function_module = None
+        self.function_name = None
+        self.function_arguments = None
 
     def store(self):
         """
@@ -291,6 +311,8 @@ class Task(Model):
 
     @classmethod
     def change_status(cls, connection, prev_status, new_status):
+        """Change the status of a task from a given one to a new one.
+        """
         sql = f"""UPDATE {cls.table_name} SET status = :new_status
                   WHERE status == :prev_status"""
         data = {"prev_status": prev_status, "new_status": new_status}
@@ -316,6 +338,8 @@ class Task(Model):
 
 
 class Result(Model):
+    """The model to store function result of delayed executed tasks.
+    """
 
     table_name = "result"
     columns = {
@@ -345,15 +369,20 @@ class Result(Model):
         function_arguments = None,
         rowid = None
     ):
-        super().__init__(connection=connection)
         # store all arguments as instance attributes.
-        if ttl is None:
-            # ttl must be of type datetime. The real value gets set
-            # when the result is updated by a worker.
-            ttl = datetime.datetime.now()
-        for name, value in locals().items():
-            if name not in ("self", "connection"):
-                self.__dict__[name] = value
+        super().__init__(connection=connection)
+        self.rowid = rowid
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.uuid = uuid
+        self.status = status
+        self.function_name = function_name
+        self.function_module = function_module
+        self.function_arguments = function_arguments
+        self.function_result = function_result
+        self.error_message = error_message
+        self.ttl = ttl if ttl else datetime.datetime.now()
 
     @property
     def is_waiting(self):
@@ -368,7 +397,7 @@ class Result(Model):
         return bool(self.error_message)
 
     def store(self):
-        """Stores the result as a new entry in the result table.
+        """Stores the result as a new entry in the result-table.
         """
         if self.func:
             self.function_module = self.func.__module__
@@ -432,6 +461,9 @@ class Result(Model):
 
 
 class Settings(Model):
+    """
+    Model with a single entry in the database storing the settings.
+    """
 
     table_name = "settings"
     columns = {
@@ -719,7 +751,7 @@ class SQLiteInterface:
 
     @db_access
     def register_task(self, func, schedule=None, crontab="", uuid="",
-                      args=(), kwargs=None, unique=False):
+                      args=(), kwargs=None):
         """
         Store a callable in the task-table of the database. If the
         callable is a delayed task with a potential result create also a

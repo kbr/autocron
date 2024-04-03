@@ -166,7 +166,7 @@ def delay(func):
             # in ready- or error-state:
             try:
                 function_result = func(*args, **kwargs)
-            except Exception as err:
+            except Exception as err:  # pylint: disable=broad-exception-caught
                 error_message = str(err)
                 status = TASK_STATUS_ERROR
                 function_result = None

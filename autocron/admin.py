@@ -22,12 +22,16 @@ PGM_DESCRIPTION = """
 
 
 class Admin:
+    """Collection of methods for administration-tasks.
+    """
 
     def __init__(self, db_name):
         self.interface = SQLiteInterface()
         self.interface.init_database(db_name)
 
     def show_info(self):
+        """Tabular view of the settings.
+        """
         settings = self.interface.get_settings()
         column_width = len(max(settings.columns, key=len))
         database = "database"
@@ -40,20 +44,24 @@ class Admin:
         print()
 
     def set_max_workers(self, workers):
+        """Set the number of workers.
+        """
         settings = self.interface.get_settings()
         settings.max_workers = workers
         self.interface.update_settings(settings)
         print(f"set max_workers to {workers}")
 
     def set_autocron_lock(self, flag):
-        """Set set_autocron_lock flag."""
+        """Set the autocron_lock flag.
+        """
         settings = self.interface.get_settings()
         settings.autocron_lock = convert_flag(flag)
         self.interface.update_settings(settings)
         print(f"set autocron lock to {flag}")
 
     def set_monitor_lock(self, flag):
-        """Set monitor_lock flag."""
+        """Set the monitor_lock flag.
+        """
         settings = self.interface.get_settings()
         settings.monitor_lock = convert_flag(flag)
         self.interface.update_settings(settings)
@@ -90,13 +98,19 @@ class Admin:
         print(f"Set result-ttl to {ttl} seconds")
 
     def set_defaults(self):
+        """Reset all settings to the default values.
+        """
         settings = self.interface.get_settings()
         settings.__dict__.update(SETTINGS_DEFAULT_DATA)
         self.interface.update_settings(settings)
-        print(f"\nautocron reset to default data:")
+        print("\nautocron reset to default data:")
         self.show_info()
 
     def delete_database(self):
+        """
+        Delete the sqlite-database. A new one will get created on the
+        next start of the admin-tool or autocron.
+        """
         answer = input("sure to delete the current database? [y/n]: ")
         if answer.lower() == 'y':
             self.interface.db_name.unlink(missing_ok=True)
@@ -182,7 +196,6 @@ def get_command_line_arguments():
         action="store_true",
         help="delete the current database."
     )
-
     return parser.parse_args()
 
 

@@ -9,13 +9,11 @@ handles this.
 
 import os
 import pathlib
-import queue
 import signal
 import subprocess
 import sys
 import threading
 import time
-# from types import SimpleNamespace
 
 from .sqlite_interface import SQLiteInterface
 
@@ -116,6 +114,8 @@ class Engine:
         """
         result = False
         self.interface.init_database(database_file)
+
+        # don't start the engine if autocron is not active:
         if self.interface.autocron_lock:
             return result
 
@@ -154,13 +154,17 @@ class Engine:
                 # terminate the monitor thread
                 self.exit_event.set()
             self.monitor_thread = None
-        # stop registration and clean up the database
-        self.interface.registrator.stop()
-        self.interface.tear_down_database()
-        # terminate the workers here in the main process:
+
+        # terminate the workers (if any) here in the main process:
+        # don't do this in the monitor thread, because the monitor thread
+        # may be unable to send the terminate signal to all workers before
+        # the main process terminates.
         for process in self.processes:
             process.terminate()
 
+        # stop registration and clean up the database
+        self.interface.registrator.stop()
+        self.interface.tear_down_database()
 
     def _terminate(self, signalnum, stackframe=None):
         """

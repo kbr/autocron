@@ -1,7 +1,7 @@
 """
 worker.py
 
-worker class for handling cron and delegated tasks.
+worker class for handling cron- and delayed-tasks.
 """
 
 import importlib
@@ -14,7 +14,8 @@ from autocron.schedule import CronScheduler
 from autocron import sqlite_interface
 
 
-DEFAULT_WORKER_IDLE_TIME = 1  # base idle time for auto-calculation
+# base idle time (in seconds) for auto-calculation
+DEFAULT_WORKER_IDLE_TIME = 1
 
 
 class Worker:
