@@ -117,8 +117,7 @@ def cron(crontab=None,
         interface.registrator.register(
             func,
             schedule=schedule,
-            crontab=crontab,
-            unique=True  # don't register cron-tasks twice
+            crontab=crontab
         )
         return func
     return wrapper

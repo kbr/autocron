@@ -534,8 +534,8 @@ class TaskRegistrator:
         self.exit_event = threading.Event()
         self.registration_thread = None
 
-    def register(self, func, schedule=None, crontab="", uuid="",
-                       args=(), kwargs=None, unique=False):
+    def register(self, func, args=(), kwargs=None,
+                       crontab="", uuid="", schedule=None):
         """
         Register a task for later processing. Arguments are the same as
         for `SQLiteInterface.register_task()` which is called from a
@@ -550,7 +550,6 @@ class TaskRegistrator:
             "uuid": uuid,
             "args": args,
             "kwargs": kwargs,
-            "unique": unique
         })
 
     def _process_queue(self):
