@@ -2,13 +2,13 @@
 autocron documentation
 ======================
 
-**autocron** is a simple asynchronous background task library to execute tasks in a separate process, not blocking the main application otherwise.
+**autocron** is a asynchronous background task library to execute tasks in a separate process, not blocking the main application otherwise.
 
-**autocron** does not need any dependencies beside the Python Standard-Library and is easy to install and easy to integrate into web-applications, like django, flask, pyramid, bottle, tornado or starlette. See usage for details.
+**autocron** does not need any dependencies beside the Python Standard-Library and is easy to install and to integrate to web-applications, like django, flask, pyramid or bottle. Because task registering is non-blocking it can also be used with async frameworks.
 
-**autocron** makes use of a ``SQLite`` database as message storage. This is fast enought for low- to medium-traffic sites. Which are most websites.
+**autocron** makes use of the ``SQLite`` database as storage and handles multi-processing access to the database. ``SQLite`` is fast enough for low- to medium-traffic sites. Which are most websites.
 
-    The idea behind ``autocron`` is to make the integration of an asynchronous task handler as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work but for horizontal scaling autocron is currently not designed.
+    **The idea** behind ``autocron`` is to make the integration of an asynchronous task handler to web-applications as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work. For horizontal scaling autocron is currently not designed.
 
 All configurations are preset with useful values and can get inspected and modified by the ``autocron`` command-line based :ref:`Admin Interface <admin-iterface>`.
 
@@ -24,25 +24,29 @@ Installation
 Quickstart
 ----------
 
-autocron provides two decorators: ``cron`` for recurring tasks and ``delay`` to delegate a long running task to a background process.
+autocron provides two decorators: ``cron`` for recurring tasks and ``delay`` to delegate long running tasks to background processes.
 
-Here is a simple example how to use autocron with the flask web-framework that can be run with ``$ flask --app application run``: ::
+Here is an example how to use autocron with the **flask** web-framework: ::
 
     # application.py
+    import time
 
     import autocron
     from flask import Flask
 
     app = Flask(__name__)
-    autocron.start("the_flask_app.db")
+    autocron.start("project.db")
 
     @autocron.cron("* * * * *")
     def cronjob():
         # do something from time to time ...
+        print("executed every minute")
 
     @autocron.delay
     def do_this_later():
         # time consuming task here ...
+        time.sleep(2)
+        print("do this later")
 
     @app.route("/later")
     def later():
@@ -50,15 +54,16 @@ Here is a simple example how to use autocron with the flask web-framework that c
         return "delayed action triggered"
 
 
-Calling ``autocron.start()`` starts the background workers. When the application stops, the workers are stopped too.
+The command ``$ flask --app application run`` will start the application and ``autocron.start()`` starts the background workers. When the application stops, the workers are also shut down.
 
-**What next?** Select your web-application of choice and learn how easy it is to :ref:`integrate<integration>` autocron to different web-frameworks and more details.
+**What next?** For further details refer how to :ref:`integrate<integration>` autocron with different web-frameworks.
 
 
 History
 -------
 
-**autocron** is the successor of `autotask <https://github.com/kbr/autotask>`_  which was introduced in 2016 as a django-application to replace Celery on a given project for making monitoring and maintenance easier. Since then it has been used in production without any flaws (at least none has popped up in the used project). But it has had strong roots in Python 2, needed improvements for django >= 3.0 and was also bound to the django ORM for message handling. All this should be removed in an update. Also there is another (unrelated) tool named "autotask" out there in the wild. Therefore the rewrite and renaming.
+**autocron** is the successor of `autotask <https://github.com/kbr/autotask>`_  which was introduced in 2016 as a django-application to replace Celery on a given project for making monitoring and maintenance easier. Since then it has been used in production. But it has strong roots in Python 2 and is bound to older django versions. **autocron** removes all this. Also another (unrelated) tool named "autotask" is out there in the wild. Therefore the rewrite and renaming.
+
 
 ---
 

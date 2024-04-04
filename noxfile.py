@@ -54,6 +54,7 @@ def uppload_to_pypi(session):
     session.install("twine")
     session.run("twine", "upload", "dist/*")  #, "--verbose")
 
+
 @nox.session
 def sphinx(session):
     session.install("-e", ".")

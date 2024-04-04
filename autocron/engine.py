@@ -142,9 +142,9 @@ class Engine:
 
     def stop(self):
         """
-        Shut down the monitor-thread which in turn will stop all running
-        workers. Also release the monitor_lock flag and prevent
-        functions from getting registered.
+        Terminate the workers and tear-down the database. This method is
+        called when the process terminates. It is not necessary to call
+        this method directly.
         """
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.

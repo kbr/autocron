@@ -5,6 +5,23 @@ Version History
 development
 -----------
 
+
+0.9.4 - 2024-04-03
+------------------
+
+- rewrite of the data-model
+- restructure of the database access
+- non-blocking function registering
+- worker and engine adapted
+- code simplifications
+- lot of fixes
+
+
+0.9.3 - 2024-03-11
+------------------
+
+- changes in the sql_interface
+- improved worker
 - rewrite of the scheduler module
 - tests changed to pytest
 - fixed: reset result_ttl

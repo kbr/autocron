@@ -1,5 +1,5 @@
 """
-Implementatiom of the decorators ``cron`` and ``delay`` for running
+Implementation of the decorators ``cron`` and ``delay`` for running
 recurring task and to delegate long running tasks to a background
 process.
 """
@@ -129,24 +129,17 @@ def delay(func):
 
     >>> @delay
     >>> def sendmail(recipient, message):
-    >>>     # conde goes here ...
+    >>>     # code goes here ...
 
     The decorator does not take any arguments. Calling ``sendmail()``
     will return from the call immediately and this callable will get
     executed later in another process.
 
-    In any case the decorated function will return a Result-instance. If
-    autocron is active the result will be in waiting mode and may not be
-    in the database because the dataset gets created in a separate
-    thread.
-
-    If autocron is not active, the result-instance will be in ready- or
+    The decorated function will return a Result-instance. If autocron is
+    active the result will be in waiting mode and may not be in the
+    database because the dataset gets created in a separate thread. If
+    autocron is not active, the result-instance will be in ready- or
     error-mode, depending on the function call.
-
-    However, if the code runs in a worker process, the wrapper returns
-    the result of the function call and not a Result-instance. This is
-    because in the worker process there is already a Result instance
-    available that gets updated with the result from the function call.
     """
     def wrapper(*args, **kwargs):
         # the wrapper will not get called during import time.
@@ -155,8 +148,10 @@ def delay(func):
         if not interface.accept_registrations:
             # this is the case when the decorated function gets called
             # in a worker process. In this case the wrapper returns the
-            # result from the function call and not a Result instance.
-            # (the error handling is done in the worker.)
+            # result from the function call and not a Result instance,
+            # because the Result instance is already existing and just
+            # updated by the worker.
+            # (also the error handling is done by the worker.)
             return func(*args, **kwargs)
 
         # in the 'main' process autocron may be active or not:

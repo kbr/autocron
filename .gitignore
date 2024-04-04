@@ -9,3 +9,4 @@ autocron.db
 build/
 dist/
 docs/build/*
+docs/requirements/requirements.txt
