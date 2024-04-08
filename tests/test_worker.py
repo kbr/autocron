@@ -67,5 +67,5 @@ def test_handle_delayed_task(interface):
 
     # get the result by the known uuid:
     result = interface.get_result_by_uuid(uuid=uuid_)
-    assert result.is_waiting is False
+    assert result.is_ready() is True
     assert result.function_result == 42

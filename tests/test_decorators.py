@@ -79,7 +79,7 @@ def test_delay_inactive(interface):
     interface.autocron_lock = True  # autocron is inactive
     wrapper = decorators.delay(tst_add)
     result = wrapper(40, 2)
-    assert result.is_waiting is False
+    assert result.is_ready() is True
     assert result.has_error is False
     assert result.function_result == 42
     assert interface.count_tasks() == 0
@@ -87,21 +87,23 @@ def test_delay_inactive(interface):
     # raise an error during function execution:
     wrapper = decorators.delay(tst_div)
     result = wrapper(1, 0)
-    assert result.is_waiting is False
+    assert result.is_ready() is True
     assert result.has_error is True
     assert result.function_result is None
 
 
 def test_delay_active(interface):
     """
-    In active mode the delay decorator returns a result-instance in waiting state and creates a task- and a result-entry in the database.
+    In active mode the delay decorator returns a result-instance in
+    waiting state and creates a task- and a result-entry in the
+    database.
     """
     interface.registrator.start()
     assert interface.count_tasks() == 0
     assert interface.count_results() == 0
     wrapper = decorators.delay(tst_add)
     result = wrapper(40, 2)
-    assert result.is_waiting is True
+    assert result.is_ready() is False
     time.sleep(0.1)
     assert interface.count_tasks() == 1
     assert interface.count_results() == 1

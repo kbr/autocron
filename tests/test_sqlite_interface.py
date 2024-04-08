@@ -303,6 +303,26 @@ def test_get_task_by_function_name(interface):
         assert task.function_name == tst_cron_function.__name__
 
 
+def test_task_is_ready(interface):
+    """
+    Test for correct refresh of a Result instance on calling 'is_ready()'.
+    """
+    with Connection(interface.db_name) as conn:
+        uuid_ = uuid.uuid4().hex
+        result = Result(conn, func=tst_function, uuid=uuid_)
+        result.store()
+    assert result.uuid == uuid_
+    assert result.is_ready() is False
+
+    # update and result and check for changes:
+    answer = 42
+    interface.update_result(uuid=uuid_, result=answer)
+    assert result.is_ready() is True
+    assert result.has_error is False
+    assert result.result == answer
+
+
+
 def test_delete_outdated_results(interface):
     """
     Test to store and delete results.
