@@ -20,7 +20,7 @@ _engine = Engine()
 _interface = SQLiteInterface()
 
 
-def start(database_file):
+def start(database_file, workers=None):
     """
     Call this from the framework of choice to explicitly activate
     autocron. ``database_file`` is a string with the file-name of the
@@ -29,7 +29,7 @@ def start(database_file):
     also be an absolute path so the file will get stored elsewere. In
     this case all directories in the path must exist.
     """
-    _engine.start(database_file=database_file)
+    _engine.start(database_file=database_file, workers=workers)
 
 
 def stop():

@@ -133,6 +133,9 @@ class Engine:
 
             # adapt number of workers if given
             if workers is not None:
+                # override the already loaded value
+                self.interface.max_workers = workers
+                # and update the settings
                 settings = self.interface.get_settings()
                 settings.max_workers = workers
                 self.interface.update_settings(settings)
