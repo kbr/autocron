@@ -5,6 +5,8 @@ Version History
 development
 -----------
 
+- fix: don't register crontasks twice
+
 
 0.9.4 - 2024-04-03
 ------------------

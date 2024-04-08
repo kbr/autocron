@@ -257,7 +257,7 @@ class Task(Model):
 
     def store(self):
         """
-        Store a new task in the database.
+        Store a new task in the database. Returns the rowid of the new dataset.
         """
         if self.schedule is None:
             self.schedule = datetime.datetime.now()
@@ -286,6 +286,21 @@ class Task(Model):
                   AND status == {TASK_STATUS_WAITING}"""
         data = {"schedule": datetime.datetime.now()}
         return sql, data
+
+    @classmethod
+    def get_by_function_name(cls, function, connection):
+        """
+        Return a task instance identified by the given function or None
+        if no task is found.
+        """
+        sql = cls._get_sql_select()
+        sql = f"""{sql} WHERE function_module == :function_module
+                        AND function_name == :function_name"""
+        data = {
+            "function_module": function.__module__,
+            "function_name": function.__name__
+        }
+        return cls.select(connection=connection, sql=sql, data=data)
 
     @classmethod
     def next_task(cls, connection):
@@ -568,9 +583,6 @@ class TaskRegistrator:
                 if self.exit_event.is_set():
                     break
             else:
-                # got a task for registration:
-                # The data is a dict with the locals() from self.register()
-                # excluding "self".
                 self.interface.register_task(**data)
 
     def start(self):
@@ -754,7 +766,9 @@ class SQLiteInterface:
         """
         Store a callable in the task-table of the database. If the
         callable is a delayed task with a potential result create also a
-        corresponding entry in the result table.
+        corresponding entry in the result table. If the callable is a
+        crontask, check whether the task is already registered and don't
+        register the callable again.
         """
         if self.accept_registrations:
             if not schedule:
@@ -762,6 +776,9 @@ class SQLiteInterface:
             if kwargs is None:
                 kwargs = {}
             with Connection(self.db_name, exclusive=True) as conn:
+                if crontab and Task.get_by_function_name(func, conn):
+                    # don't register a crontab twice:
+                    return
                 task = Task(
                     connection=conn,
                     func=func,

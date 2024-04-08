@@ -204,12 +204,28 @@ def test_delete_task_via_interface(interface):
 def test_register_cron_task(interface):
     """
     Register a cron task should create a task entry but no result
-    entry.
+    entry. Also crontasks should not get registered twice.
     """
-    interface.register_task(tst_function, crontab="*")
+    interface.register_task(tst_cron_function, crontab="*")
     with Connection(interface.db_name) as conn:
         assert Task.count_rows(conn) == 1
         assert Result.count_rows(conn) == 0
+
+    # try to register again:
+    interface.register_task(tst_cron_function, crontab="*")
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 1
+
+    # registration of another crontask should work:
+    interface.register_task(tst_function, crontab="*")
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 2
+
+    # registration of a delayed function registered already as
+    # a crontask should also work. (this is a theoretical case.)
+    interface.register_task(tst_function)
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 3
 
 
 def test_register_delayed_task(interface):
@@ -271,6 +287,20 @@ def test_get_next_task_priority(interface):
 
     task = interface.get_next_task()
     assert task is None
+
+
+def test_get_task_by_function_name(interface):
+    """Store two tasks and get one by name.
+    """
+    with Connection(interface.db_name) as conn:
+        Task(connection=conn, func=tst_function).store()
+        Task(connection=conn, func=tst_cron_function).store()
+    with Connection(interface.db_name) as conn:
+        assert Task.count_rows(conn) == 2
+        task = Task.get_by_function_name(tst_cron_function, conn)
+        assert task is not None
+        assert task.function_module == tst_cron_function.__module__
+        assert task.function_name == tst_cron_function.__name__
 
 
 def test_delete_outdated_results(interface):
