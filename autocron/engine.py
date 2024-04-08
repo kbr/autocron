@@ -95,7 +95,7 @@ class Engine:
             self.orig_signal_handlers[signalnum] = signal.getsignal(signalnum)
             signal.signal(signalnum, self._terminate)
 
-    def start(self, database_file):
+    def start(self, database_file, workers=None):
         """
         Starts the autocron worker in case autocron is active and no
         other application process has already started the workers. The
@@ -130,6 +130,13 @@ class Engine:
         # check whether the process monitors the workers,
         # but dont't start the monitor twice:
         if self.interface.acquire_monitor_lock() and not self.monitor_thread:
+
+            # adapt number of workers if given
+            if workers is not None:
+                settings = self.interface.get_settings()
+                settings.max_workers = workers
+                self.interface.update_settings(settings)
+
             self.set_signal_handlers()
             self.exit_event = threading.Event()
             self.monitor_thread = threading.Thread(target=self.worker_monitor)
