@@ -1,12 +1,16 @@
 .DStore
 .nox
+.pytest_cache/
+.ruff_cache/
 *.pyc
 *.egg-info
 __pycache__/*
 _notes.txt
 _todo.txt
 autocron.db
+autocron.egg-info
 build/
 dist/
 docs/build/*
 docs/requirements/requirements.txt
+test.db
