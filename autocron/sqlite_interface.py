@@ -399,34 +399,29 @@ class Result(Model):
         self.error_message = error_message
         self.ttl = ttl if ttl else datetime.datetime.now()
 
-#     @property
-#     def is_waiting(self):
-#         """Returns True if status is TASK_STATUS_WAITING else returns False.
-#         """
-#         return self.status == TASK_STATUS_WAITING
-
     @property
     def has_error(self):
         """
         Returns True if the error message is not empty. The return value
-        is invalid as long as 'is_ready()' does not return True.
+        is invalid as long as ``is_ready()`` does not return True.
         """
         return bool(self.error_message)
 
     @property
     def result(self):
         """
-        Shortcut for 'function_result'. The return value is invalid as
-        long as 'is_ready()' does not return True.
+        Shortcut for the attribute ``function_result``. The return value is invalid as
+        long as ``is_ready()`` does not return True.
         """
         return self.function_result
 
     def is_ready(self):
         """
-        Return a boolean whether the task as been processed (True). If
+        Returns ``True`` if the task has been processed, otherwise ``False``. If
         the task has been processed the result may be available or an
         error-message may be set.
-        Note for async frameworks: this is a blocking call.
+
+        Note for async frameworks: this is a *blocking call*.
         """
         processed_states = (TASK_STATUS_READY, TASK_STATUS_ERROR)
         if self.status not in processed_states:

@@ -58,23 +58,30 @@ Functions decorated with ``delay`` will return a ``Result`` instance (see below)
 Result
 ......
 
-A ``delay``-decorated function returns a ``Result`` instance. This is a wrapper around the delayed result. The instance provide attributes like ``is_waiting`` to indicate whether a result is available: ::
+A ``delay``-decorated function returns a ``Result`` instance. This is a wrapper around the delayed result. The instance provides the method ``is_ready()`` to indicate whether a task has been processed. The property ``has_error`` allows to check for errors – and in case of an error the attribute ``error_message`` holds the according error-message: ::
 
     @delay
     def do_this_later():
         # code here ...
 
-    task_result = do_this_later()
+    delayed_task = do_this_later()
     ...
-    if task_result.waiting:
-        # try to get the result later
+    if delayed_task.is_ready():
+        if delayed_task.has_error:
+            # something went wrong
+            print(delayed_task.error_message)
+        else:
+            # the result is available:
+            result = delayed_task.result
     else:
-        result = task_result.function_result
+        # try to get the result later
+        ...
 
-If autocron is inactive the decorated function will also return a ``TaskResult`` instance with the return value of the function.
+
+If autocron is inactive the decorated function will also return a ``Result`` instance with the return value of the function.
 
 .. autoclass:: autocron.sqlite_interface.Result
-    :members: has_error, is_waiting
+    :members: has_error, result, is_ready
 
 
 
