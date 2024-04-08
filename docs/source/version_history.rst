@@ -5,6 +5,7 @@ Version History
 development
 -----------
 
+- Result-class refactoring
 - fix: don't register crontasks twice
 
 
