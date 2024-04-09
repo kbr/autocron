@@ -99,7 +99,7 @@ class Engine:
         """
         Starts the autocron worker in case autocron is active and no
         other application process has already started the workers. The
-        *database_file* argument is a string with the name of the
+        ``database_file`` argument is a string with the name of the
         database to use (like "the_application.db") or a Path instance.
         If the name represents a relative path, the database is stored
         in the ``~/.autocron`` directory. This directory will get
@@ -107,10 +107,16 @@ class Engine:
         absolute path, then this path will be used as is. In this case
         all directories of the path must exist.
 
-        The function returns a boolean: True if workers have been
-        started and False otherwise. A return value of False does not
-        mean, that no workers are running – another application process
-        may have be first.
+        The ``workers`` argument takes the number of workers (as
+        integer) and stores this value in the database. If the value is
+        ``None`` (default) the number of workers is taken from the
+        database.
+
+        The function returns a boolean: ``True`` if workers have been
+        started and ``False`` otherwise. A return value of ``False``
+        does not mean that no workers are running – another application
+        process may have been first on aquiring the rights to start and
+        monitor the worker processes.
         """
         result = False
         self.interface.init_database(database_file)
@@ -153,8 +159,8 @@ class Engine:
     def stop(self):
         """
         Terminate the workers and tear-down the database. This method is
-        called when the process terminates. It is not necessary to call
-        this method directly.
+        called when the application itself terminates. It is not
+        necessary to call this method directly.
         """
         if self.monitor_thread:
             # check for self.exit_event for a test-scenario.

@@ -64,15 +64,15 @@ A ``delay``-decorated function returns a ``Result`` instance. This is a wrapper 
     def do_this_later():
         # code here ...
 
-    delayed_task = do_this_later()
+    task_result = do_this_later()
     ...
-    if delayed_task.is_ready():
-        if delayed_task.has_error:
+    if task_result.is_ready():  # note: this is a blocking call
+        if task_result.has_error:
             # something went wrong
-            print(delayed_task.error_message)
+            print(task_result.error_message)
         else:
             # the result is available:
-            result = delayed_task.result
+            result = task_result.result
     else:
         # try to get the result later
         ...
@@ -88,7 +88,7 @@ If autocron is inactive the decorated function will also return a ``Result`` ins
 start and stop
 --------------
 
-To start the autocron background workers, call ``autocron.start(<filename>)`` with a database-filename as argument. The number of workers can be set by the admin-interface.
+To start the autocron background workers, call ``autocron.start(<filename>)`` with a database-filename as argument. The number of workers can be set by the admin-interface or given as an argument for ``autocron.start()``.
 
 .. autoclass:: autocron.engine.Engine
     :members: start, stop

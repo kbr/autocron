@@ -28,6 +28,10 @@ def start(database_file, workers=None):
     this directory does not exist, it will get created. The file-name can
     also be an absolute path so the file will get stored elsewere. In
     this case all directories in the path must exist.
+
+    With ``workers`` the number of worker is set and stored in the
+    database. If the value is ``None`` (default) the number of workers
+    are read from the database.
     """
     _engine.start(database_file=database_file, workers=workers)
 

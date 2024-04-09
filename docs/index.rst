@@ -8,7 +8,7 @@ autocron documentation
 
 **autocron** makes use of the ``SQLite`` database as storage and handles multi-processing access to the database. ``SQLite`` is fast enough for low- to medium-traffic sites. Which are most websites.
 
-    **The idea** behind ``autocron`` is to make the integration of an asynchronous task handler to web-applications as easy as possible. This is often desirable for applications that don't need massive scaling. Vertical scaling will work. For horizontal scaling autocron is currently not designed.
+    **The idea** behind ``autocron`` is to make the integration of an asynchronous task handler for web-applications as easy as possible. This is often desirable also for applications that don't need massive scaling. Vertical scaling will work. For horizontal scaling autocron is currently not designed.
 
 All configurations are preset with useful values and can get inspected and modified by the ``autocron`` command-line based :ref:`Admin Interface <admin-iterface>`.
 
@@ -40,7 +40,7 @@ Here is an example how to use autocron with the **flask** web-framework: ::
     @autocron.cron("* * * * *")
     def cronjob():
         # do something from time to time ...
-        print("executed every minute")
+        print("get executed every minute")
 
     @autocron.delay
     def do_this_later():
@@ -62,7 +62,7 @@ The command ``$ flask --app application run`` will start the application and ``a
 History
 -------
 
-**autocron** is the successor of `autotask <https://github.com/kbr/autotask>`_  which was introduced in 2016 as a django-application to replace Celery on a given project for making monitoring and maintenance easier. Since then it has been used in production. But it has strong roots in Python 2 and is bound to older django versions. **autocron** removes all this. Also another (unrelated) tool named "autotask" is out there in the wild. Therefore the rewrite and renaming.
+**autocron** is the successor of `autotask <https://github.com/kbr/autotask>`_  which was written in 2016 as a django-application to replace Celery on a given project for making monitoring and maintenance easier. Since then it has been used in production. But it has strong roots in Python 2 and is bound to older django versions. **autocron** removes all this. Also another (unrelated) tool named "autotask" is out there in the wild. Therefore the rewrite and renaming.
 
 
 ---

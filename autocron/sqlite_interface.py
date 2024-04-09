@@ -384,7 +384,6 @@ class Result(Model):
         function_arguments = None,
         rowid = None
     ):
-        # store all arguments as instance attributes.
         super().__init__(connection=connection)
         self.rowid = rowid
         self.func = func
@@ -692,6 +691,7 @@ class SQLiteInterface:
     SQLite interface for application specific operations.
     This class is a Singleton.
     """
+
     _instance = None
 
     def __new__(cls):
@@ -700,13 +700,15 @@ class SQLiteInterface:
         return cls._instance
 
     def __init__(self):
-        # run __init__ just on the first instance
+        # run __init__ just once
         if self.__dict__:
             return
         self._db_name = None
         self._result_ttl = None
+        # accept_registrations will get set to False
+        # by the worker processes to not register callables by the workers
         self.accept_registrations = True
-        # attributes later set by settings:
+        # these attributes are set later by reading the settings:
         self.autocron_lock = None
         self.monitor_lock = None
         self.monitor_idle_time = None

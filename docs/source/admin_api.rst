@@ -33,32 +33,34 @@ Admin Interface
     set the database to the default settings.
 
 ``--set-autocron-lock:``
-    set the lock flag of autocron. If the flag is set, autocron is disabled and will not start. Accepts the case-insensitive arguments ``on, off, true, false``. ``on`` and ``true`` are setting the flag (disable autocron), ``off`` and ``false`` delete the flag (enable autocron):
+    set the lock flag of autocron. If the flag is set, autocron is disabled and will not start. Accepts the case-insensitive arguments ``on, off, true, false``. ``on`` and ``true`` are setting the flag (disable autocron), ``off`` and ``false`` delete the flag. Default to ``False`` (autocron enabled).
 
 ``--set-max-workers:``
-    set number of maximum worker processes. Takes an integer as argument. (autocron will start exactly this number of workers and not "as up to".) To take effect autocron needs to restart. A usefull number of workers is up to the number of cores. Defaults to 1.
+    set number of maximum worker processes at next start of autocron. Takes an integer as argument (autocron will start this number of workers and not "as up to"). A useful number of workers depends on the application. Normalwise it makes no sense to start more workers than the number of available cpu-cores. Defaults to 1.
 
 ``--set-monitor-idle-time:``
-    set the idle time (integer in seconds) of the monitor thread supervising the workers. Default value is 5 seconds. Normalwise there is no need to change this.
+    set the idle time (integer in seconds) of the monitor thread supervising the workers. Default value is 5 seconds. Normalwise there is no need to change this setting.
 
 ``--set-monitor-lock:``
-    set monitor lock flag. This is an internal flag indicating that a monitor process is active. When autocron starts with multiple processes of the web-application in parallel, the first process will start the monitor and the worker processes. Setting the flag prevents the other processes to do the same and start additonal workers on their own. On shutdown, this flag gets released. However the admin tool allows to set the flag if something does not work as it should. Arguments are ``on, off, true, false``. During normal operation you should never have the need to deal with this setting.
+    set monitor lock flag. This is an internal flag indicating that a monitor process is active. When autocron starts with multiple processes of the web-application in parallel, the first process will start the monitor and the worker processes. Setting the flag prevents other processes to do the same and start additonal workers on their own. On shutdown, this flag gets released. However the admin tool allows to set the flag if something does not work as it should. Arguments are ``on, off, true, false``. During normal operation you should never have the need to deal with this setting.
 
 ``--set-worker-idle-time:``
-    set the idle time (integer in seconds) for the worker processes. If no tasks on due the worker(s) will sleep for the given time before checking again for new tasks. Defaults to 0 seconds, what means that the value is auto-calculated. Normalwise there is no need to change this.
+    set the idle time (integer in seconds) for the worker processes. If no tasks on due the worker(s) will sleep for the given time before checking again for new tasks. Defaults to 0 seconds, what means that the value is auto-calculated. This is a setting for fine-tuning and normalwise there is no need to change this.
 
 ``--set-result-ttl:``
-    set the result time to life (ttl, in seconds). Stored results are deleted after this timespan. A change to take effect needs a restart of the application. The change will applied to new results. Already stored results keep the previous assigned ttl. Defauts to 1800 seconds (30 minutes).
+    set the result time-to-life (ttl, in seconds). Stored results are deleted after this timespan. A change of this value will applied to new results. Already stored results keep the previous assigned ttl. Defauts to 1800 seconds (30 minutes).
 
 
 Settings
 --------
 
-**autocron** comes with default settings. The admin interface allows to change the settings. By default autocron starts with one (1) **worker process**. When no tasks are on due the worker sleeps for 1 second. When waking up the worker selects the next tasks on due for processing. After handling the task the worker looks for a next task that may have been registered meanwhile. If no tasks have been registered the worker goes into idle mode again. The duration of the idle-time can be set with the option ``--set-worker-idle-time``.
+**autocron** comes with default settings. The admin interface allows to change settings. By default autocron starts with one (1) **worker process**. When no tasks are on due the worker sleeps for one (1) second. When waking up the worker selects the next tasks on due for processing. After handling the task the worker looks for a another task on due that may have been registered meanwhile. If no tasks have been registered the worker goes into idle mode again. The duration of the idle-time can be set with the option ``--set-worker-idle-time``.
 
-More workers to handle tasks are usefull if tasks are registered in a faster pace than a single worker can process them. There is no upper limit for the number of workers, but normalwise it makes no sense to start more workers than the number of available cpu-cores.
+If the worker-idle-time is set to zero (0) (which is the default), the idle-time is calculated depending on the number of workers. The idle-time starts with one (1) second and is slightly increased on more than eight (8) workers to reduce the probability that all workers access the database at the same time and may have to wait because of locks. This should work for most cases.
 
-**autocron** can get deactivated with the ``--set-autocron-lock`` setting. This can be usefull for **debugging**. The default value is ``False``. Set the value to ``True`` or ``on`` to deactivate autocron (the arguments are case insensitive). Even when ``autocron.start()`` is called in the code, autocron will check the flag and will not start. The ``delay`` decorator will behave the same, returning a ``Result`` instance but the task itself will get executed in ``sync``, i.e. a blocking task will block.
+Adding more workers to handle tasks is useful if tasks are permanently registered in a faster pace than the current number of workers can handle them. There is no upper limit for the number of workers (beside the system resources), but normalwise it makes no sense to start more workers than the number of available cpu-cores.
+
+**autocron** can get deactivated with the ``--set-autocron-lock`` setting. This can be useful for **debugging**. The default value is ``False``. Set the value to ``True`` or ``on`` to deactivate autocron (the arguments are case insensitive). Even when ``autocron.start()`` is called in the code, autocron will check the flag and will not start. The ``delay`` decorator will behave the same, returning a ``Result`` instance but the task itself will get executed in ``sync``, i.e. a blocking task will block.
 
 
 Database Storage

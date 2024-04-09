@@ -5,7 +5,8 @@ Version History
 development
 -----------
 
-- Result-class refactoring
+- refactoring the Result-class
+- add workers as argument to start()
 - fix: don't register crontasks twice
 
 

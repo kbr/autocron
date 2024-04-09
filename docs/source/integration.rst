@@ -3,7 +3,7 @@
 Integration
 ===========
 
-**autocron** is designed for easy usage and integration to web-applications. The public interface are the two decoratores ``cron`` and ``delay`` and a single function ``start()``.
+**autocron** is designed for easy usage and easy integration to web-applications. The public interface are the two decoratores ``cron`` and ``delay`` and a single function ``start()``.
 
 Just apply the decorators and call ``start()`` and you are ready to go.
 
@@ -37,7 +37,7 @@ Decorators
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
-More details about the decorators are in the chapter :ref:`Application Interface<application-iterface>`.
+More details about the decorators and ``Result`` are in the chapter :ref:`Application Interface<application-iterface>`.
 
 
 Application-Integration
@@ -50,7 +50,7 @@ To make the decorators work, **autocron** has to start. This happens in the appl
 
 with "project.db" as the name of the database-file. If the file does not exist it will be created. More details about the ``start()`` function are in the chapter :ref:`Application Interface<application-iterface>`.
 
-Where to implement the call of the ``start()`` function depends on the used framework:
+Where to integrate the ``start()`` function depends on the used framework:
 
 
 
@@ -164,7 +164,7 @@ The entry-point of the bottle-application is in a file named "application.py" th
 
 autocron gets imported and started before ``bottle.run()`` is called, because run() will not return. The ``do_this_later()`` function is imported from "utils.py". Also the cronjob-function is imported and will get executed every minute.
 
-Of course bottle-applications can get started in other ways, not causing the problem to resolve the name of the main-module, however it is best to avoid a situation like this.
+(bottle-applications can also get started in other ways, not causing the problem to resolve the name of the main-module – however it is a good idea to avoid a situation like this.)
 
 
 pyramid
@@ -187,7 +187,7 @@ For development a pyramid application can get started from the command-line via 
         print("action from the cron job")
 
 
-The module "utils.py" is imported in the main-application: ::
+The module "utils.py" is used by the main-application: ::
 
     # application.py
     from wsgiref.simple_server import make_server
@@ -217,7 +217,7 @@ In the above example ``autocron.start()`` is not called in the ``__main__`` bloc
 async frameworks
 ................
 
-    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However the way they do this may fit or not fit your needs or the way you like to handle it. Registering tasks in autocron is **non-blocking** and so suitable for async frameworks.
+    First there may be the question whether an asynchronous background task-handler like **autocron** makes sense in combination with async frameworks. It is the nature of these frameworks to do asynchronous tasks out of the box. However the way they do this may fit or not fit your needs or the way you like to handle it. Registering tasks in autocron is **non-blocking** and therefore also suitable for async frameworks.
 
 
 tornado
@@ -240,7 +240,7 @@ The tornado example is similiar to the pyramid and bottle examples, defining dec
         print("action from the cron job")
 
 
-which is imported in the main-application: ::
+The module "utils.py" is used by the main-application: ::
 
     # application.py
     import asyncio
@@ -274,7 +274,7 @@ autocron gets imported and then started from the ``main()`` function. The call o
 starlette
 .........
 
-starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks after finishing the current request first. With autocron  background-task can get decoupled from the process handling the request and it is easy to include cron-jobs. Again the decorated function is defined in a separate module: ::
+starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks after finishing the current request first. With autocron,  background-task can get decoupled from the process handling the request and it is easy to include cron-jobs. Again the decorated function is defined in a separate module: ::
 
     # utils.py
     import time
@@ -324,5 +324,9 @@ The above example can get started from the command-line by ``$ uvicorn applicati
 other frameworks
 ................
 
-The above examples can get adapted to other frameworks. It is important to avoid the use of ``cron`` or ``delay`` decorators in modules with the internal name ``__main__`` at runtime. Also the function ``start()`` must get called somewhere before the application enters the main-event loop. But that is all to take into account.
+The above examples can get adapted to other frameworks by following two rules:
+
+- Don't apply the ``cron`` and ``delay`` decorators to functions in a module with the internal name ``__main__`` at runtime.
+
+- the function ``start()`` must get called somewhere before the application enters the main-event loop.
 
