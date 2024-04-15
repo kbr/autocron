@@ -5,16 +5,16 @@ simple asynchronous background task handling with no dependencies beside
 the standard-library.
 """
 
-from .decorators import (
+from autocron.decorators import (
     cron,
     delay,
 )
-from .engine import Engine
-from .sqlite_interface import SQLiteInterface
+from autocron.engine import Engine
+from autocron.sqlite_interface import SQLiteInterface
 
 
 __all__ = ["cron", "delay", "start", "stop"]
-__version__ = "0.9.5"
+__version__ = "0.9.6-dev"
 
 _engine = Engine()
 _interface = SQLiteInterface()
