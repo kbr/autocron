@@ -10,6 +10,17 @@ Functions decorated with ``delay`` will get executes later in a separate process
 To start the autocron background workers, the function ``start()`` must get called somewere in the code. The function ``stop()`` will stop the workers. It is not necessary to call ``stop()`` because autocron stops the workers on shutdown of the main application.
 
 
+
+start and stop
+--------------
+
+To start the autocron background workers, call ``autocron.start(<filename>)`` with a database-filename as argument. The number of workers can be set by the admin-interface or given as an argument for ``autocron.start()``.
+
+.. autoclass:: autocron.engine.Engine
+    :members: start, stop
+
+
+
 cron
 ----
 
@@ -23,6 +34,7 @@ To register a cron-function (that means autocron is aware of the decorated funct
 .. automodule:: autocron.decorators
     :noindex:
     :members: cron
+
 
 
 Example
@@ -41,6 +53,7 @@ and could also be configured by keyword-arguments: ::
         ...
 
 
+
 delay
 -----
 
@@ -56,7 +69,7 @@ Functions decorated with ``delay`` will return a ``Result`` instance (see below)
 
 
 Result
-......
+------
 
 A ``delay``-decorated function returns a ``Result`` instance. This is a wrapper around the delayed result. The instance provides the method ``is_ready()`` to indicate whether a task has been processed. The property ``has_error`` allows to check for errors – and in case of an error the attribute ``error_message`` holds the according error-message: ::
 
@@ -83,13 +96,4 @@ If autocron is inactive the decorated function will also return a ``Result`` ins
 .. autoclass:: autocron.sqlite_interface.Result
     :members: has_error, result, is_ready
 
-
-
-start and stop
---------------
-
-To start the autocron background workers, call ``autocron.start(<filename>)`` with a database-filename as argument. The number of workers can be set by the admin-interface or given as an argument for ``autocron.start()``.
-
-.. autoclass:: autocron.engine.Engine
-    :members: start, stop
 
