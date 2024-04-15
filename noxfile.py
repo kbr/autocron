@@ -29,7 +29,7 @@ def pytest(session):
 
 
 @nox.session
-def lint(session):
+def pylint(session):
     session.install("-e", ".")
     session.install("pylint")
     session.run("pylint", "autocron")
