@@ -2,8 +2,8 @@ Version History
 ===============
 
 
-development
------------
+0.9.5 - 2024-04-15
+------------------
 
 - refactoring the Result-class
 - add worker argument to start()
