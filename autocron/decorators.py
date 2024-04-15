@@ -4,6 +4,7 @@ recurring task and to delegate long running tasks to a background
 process.
 """
 
+import functools
 import uuid
 
 from .schedule import CronScheduler
@@ -141,6 +142,8 @@ def delay(func):
     autocron is not active, the result-instance will be in ready- or
     error-mode, depending on the function call.
     """
+
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         # the wrapper will not get called during import time.
         # at runtime the database is initialized and it is safe

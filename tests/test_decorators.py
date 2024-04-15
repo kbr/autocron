@@ -14,12 +14,15 @@ TEST_DB_NAME = "test.db"
 
 # test marker functions:
 def tst_cron():
+    """tst_cron_docstring"""
     pass
 
 def tst_add(a, b):
+    """tst_add_docstring"""
     return a + b
 
 def tst_div(a, b):
+    """tst_div_docstring"""
     return a / b
 
 
@@ -108,3 +111,12 @@ def test_delay_active(interface):
     assert interface.count_tasks() == 1
     assert interface.count_results() == 1
     interface.registrator.stop()
+
+
+def test_delay_comment():
+    """
+    check for functool.wraps
+    """
+    wrapper = decorators.delay(tst_add)
+    assert callable(wrapper) is True
+    assert wrapper.__doc__ == tst_add.__doc__

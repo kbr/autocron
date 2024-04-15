@@ -10,6 +10,7 @@ Data models, sql-definition and access routines.
 
 
 import datetime
+import functools
 import pathlib
 import pickle
 import queue
@@ -85,6 +86,8 @@ def db_access(function):
     Access decorator. Repeats the decorated function several times in
     case the database is locked because of write- or exclusive-access.
     """
+
+    @functools.wraps(function)
     def wrapper(*args, **kwargs):
         """
         Repeat the wrapped function call in case of an OperationalError.
