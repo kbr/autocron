@@ -2,8 +2,8 @@ Version History
 ===============
 
 
-development
------------
+1.0rc1 - 2024-04-15
+-------------------
 
 - sphinx update
 - minor fixes for rtd
