@@ -14,7 +14,7 @@ from .sqlite_interface import SQLiteInterface
 
 
 __all__ = ["cron", "delay", "start", "stop"]
-__version__ = "0.9.4"
+__version__ = "0.9.5"
 
 _engine = Engine()
 _interface = SQLiteInterface()
