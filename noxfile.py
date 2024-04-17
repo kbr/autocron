@@ -5,16 +5,6 @@ PYTHON_TEST_VERSIONS = ("3.8", "3.9", "3.10", "3.11", "3.12", "3.13")
 PYTHON_DEVELOPMENT_VERSION = "3.11"
 
 
-@nox.session(python=PYTHON_TEST_VERSIONS)
-def test(session):
-    session.install("-e", ".")
-    if session.posargs:
-        testfiles = [f"tests/{f}.py" for f in session.posargs]
-    else:
-        testfiles = []
-    session.run("python", "-m", "unittest", *testfiles)
-
-
 # for position arguments run:
 # $ nox -s pytest-3.11 -- testfile
 @nox.session(python=PYTHON_TEST_VERSIONS)

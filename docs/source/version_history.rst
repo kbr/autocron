@@ -2,6 +2,14 @@ Version History
 ===============
 
 
+1.0 - 2024-04-17
+----------------
+
+- minor documentation update
+- fixed some typos
+- clean up nox-sessions
+
+
 1.0rc1 - 2024-04-15
 -------------------
 

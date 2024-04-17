@@ -23,7 +23,7 @@ For installation use pip:
 
 autocron provides two decorators: ``cron`` that takes a string in [cron](https://en.wikipedia.org/wiki/Cron#CRON_expression)-format as argument, but accepts also keyword-arguments like *minutes* and *hours*. And ``delay`` to delegate a long running task to a background process.
 
-Here is a simple example how to use autocron with the flask web-framework that can be run with ``$ flak --app application run``:
+Here is a simple example how to use autocron with the flask web-framework that can be run with ``$ flask --app application run``:
 
 ```
     # application.py
