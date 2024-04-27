@@ -132,9 +132,23 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
     >>> def sendmail(recipient, message):
     >>>     # code goes here ...
 
-    The decorator does not take any arguments. Calling ``sendmail()``
-    will return from the call immediately and this callable will get
-    executed later in another process.
+    In this example decorator does not take any arguments. Calling
+    ``sendmail()`` will return from the call immediately and this
+    callable will get executed later in another process.
+
+    Optional the decorator can get called with arguments specifying a defined delay expressed in weeks, days, hours and minutes like:
+
+    >>> @delay(minutes=5)
+    >>> def sendmail(recipient, message):
+    >>>     # code goes here ...
+
+    The function ``sendmail()`` will get executed in five minutes from now.
+
+    If the argument ``schedule`` is given, this must be a ``datetime``
+    object. In this case all other keyword-arguments are overridden; the
+    decorated function will get executed at the given ``schedule`` if
+    the schedule is a date in the future. If the ``schedule`` is in the
+    past the function will get executed as soon as possibel.
 
     The decorated function will return a Result-instance. If autocron is
     active the result will be in waiting mode and may not be in the
@@ -194,7 +208,7 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
                 args=args,
                 kwargs=kwargs,
                 uuid=uuid_,
-                schedule=schedule
+                schedule=get_schedule()
             )
             result = Result.from_registration(
                 function, args, kwargs,
