@@ -19,6 +19,12 @@ For installation use pip:
     $ pip install autocron
 ```
 
+or conda:
+
+```
+    $ conda install autocron
+```
+
 ## Quickstart
 
 autocron provides two decorators: ``cron`` that takes a string in [cron](https://en.wikipedia.org/wiki/Cron#CRON_expression)-format as argument, but accepts also keyword-arguments like *minutes* and *hours*. And ``delay`` to delegate a long running task to a background process.

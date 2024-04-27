@@ -20,6 +20,10 @@ Installation
 
     $ pip install autocron
 
+A `conda <https://conda.io>`_  package is also available: ::
+
+    $ conda install autocron
+
 
 Quickstart
 ----------

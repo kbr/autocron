@@ -2,6 +2,12 @@ Version History
 ===============
 
 
+development
+-----------
+
+- conda installation package added
+
+
 1.0 - 2024-04-17
 ----------------
 
