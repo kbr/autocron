@@ -6,7 +6,7 @@ development
 -----------
 
 - conda installation package added
-- the delay decorator can optional take arguments to specify a defined delay
+- the delay decorator can take optional arguments to specify a defined delay
 
 
 1.0 - 2024-04-17
