@@ -4,7 +4,7 @@ recurring task and to delegate long running tasks to a background
 process.
 """
 
-import functools
+import datetime
 import uuid
 
 from .schedule import CronScheduler
@@ -124,7 +124,7 @@ def cron(crontab=None,
     return wrapper
 
 
-def delay(func):
+def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
     """
     Decorator for a delayed task. Apply this as:
 
@@ -143,7 +143,17 @@ def delay(func):
     error-mode, depending on the function call.
     """
 
-    @functools.wraps(func)
+    function = None
+
+    def get_schedule():
+        if schedule:
+            return schedule
+        if weeks or days or hours or minutes:
+            delta = datetime.timedelta(weeks=weeks, days=days, hours=hours, minutes=minutes)
+            now = datetime.datetime.now()
+            return now + delta
+        return None
+
     def wrapper(*args, **kwargs):
         # the wrapper will not get called during import time.
         # at runtime the database is initialized and it is safe
@@ -155,14 +165,14 @@ def delay(func):
             # because the Result instance is already existing and just
             # updated by the worker.
             # (also the error handling is done by the worker.)
-            return func(*args, **kwargs)
+            return function(*args, **kwargs)
 
         # in the 'main' process autocron may be active or not:
         if interface.autocron_lock:
             # inactive: call the function and return a Result-instance
             # in ready- or error-state:
             try:
-                function_result = func(*args, **kwargs)
+                function_result = function(*args, **kwargs)
             except Exception as err:  # pylint: disable=broad-exception-caught
                 error_message = str(err)
                 status = TASK_STATUS_ERROR
@@ -171,7 +181,7 @@ def delay(func):
                 error_message = ""
                 status = TASK_STATUS_READY
             result = Result.from_registration(
-                func, args, kwargs, status=status,
+                function, args, kwargs, status=status,
                 function_result=function_result,
                 error_message=error_message
             )
@@ -180,10 +190,26 @@ def delay(func):
             # in waiting-state:
             uuid_ = uuid.uuid4().hex
             interface.registrator.register(
-                func, args=args, kwargs=kwargs, uuid=uuid_
+                function,
+                args=args,
+                kwargs=kwargs,
+                uuid=uuid_,
+                schedule=schedule
             )
             result = Result.from_registration(
-                func, args, kwargs, uuid=uuid_, status=TASK_STATUS_WAITING
+                function, args, kwargs,
+                uuid=uuid_,
+                status=TASK_STATUS_WAITING
             )
         return result
-    return wrapper
+
+    def catcher(func):
+        nonlocal function
+        function = func
+        return wrapper
+
+    if len(args) == 1:
+        if callable(args[0]):
+            function = args[0]
+            return wrapper
+    return catcher

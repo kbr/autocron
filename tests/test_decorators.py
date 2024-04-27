@@ -113,10 +113,18 @@ def test_delay_active(interface):
     interface.registrator.stop()
 
 
-def test_delay_comment():
+def test_delay_arguments(interface):
     """
-    check for functool.wraps
+    The delay decorator optional can take arguments for delaying. In
+    this case a catcher is returned taking the callable to wrap.
+    Otherwise it should behave like `test_delay_inactive` or
+    `test_delay_active`.
     """
-    wrapper = decorators.delay(tst_add)
-    assert callable(wrapper) is True
-    assert wrapper.__doc__ == tst_add.__doc__
+    interface.autocron_lock = True  # autocron is inactive
+    catcher = decorators.delay(minutes=5)
+    wrapper = catcher(tst_add)
+    result = wrapper(40, 2)
+    assert result.is_ready() is True
+    assert result.has_error is False
+    assert result.function_result == 42
+    assert interface.count_tasks() == 0
