@@ -4,6 +4,12 @@ The sqlite interface.
 Data models, sql-definition and access routines.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
 # some structures are larger than pylint likes:
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-arguments

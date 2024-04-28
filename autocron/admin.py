@@ -4,6 +4,13 @@ admin.py
 Administration tool to access the database.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
+
 import argparse
 
 from autocron.sqlite_interface import (

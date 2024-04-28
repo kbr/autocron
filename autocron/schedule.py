@@ -24,6 +24,13 @@ Also a range "m-n" or a combination of list and
 range like "a,b,m-n,c,p-q" is allowed.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
+
 import calendar
 import datetime
 import re

@@ -4,6 +4,12 @@ worker.py
 worker class for handling cron- and delayed-tasks.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
 import importlib
 import os
 import signal

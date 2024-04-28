@@ -5,6 +5,13 @@ simple asynchronous background task handling with no dependencies beside
 the standard-library.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
+
 from autocron.decorators import (
     cron,
     delay,

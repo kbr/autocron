@@ -7,6 +7,13 @@ function ``start(filename)`` in the ``__init__.py`` module of autocron
 handles this.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
+
 import os
 import pathlib
 import signal

@@ -4,6 +4,13 @@ recurring task and to delegate long running tasks to a background
 process.
 """
 
+# this module is part of autocron
+# copyright (c) 2024 Klaus Bremer
+# all rights reserved
+#
+# license: MIT
+
+
 import datetime
 import uuid
 
