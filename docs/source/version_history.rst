@@ -5,8 +5,9 @@ Version History
 development
 -----------
 
-- conda installation package added
 - the delay decorator can take optional arguments to specify a defined delay
+- conda installation package added
+- nox combined with ruff
 
 
 1.0 - 2024-04-17
