@@ -25,6 +25,14 @@ def pylint(session):
     session.run("pylint", "autocron")
 
 
+@nox.session
+def ruff(session):
+    # local development setup:
+    # nox runs from a separate conda environment with also ruff installed.
+    # so ruff runs external and no session.install() calls are necessary.
+    session.run("ruff", "check", "autocron", external=True)
+
+
 @nox.session(python=PYTHON_DEVELOPMENT_VERSION)
 def build(session):
     session.install("-e", ".")
