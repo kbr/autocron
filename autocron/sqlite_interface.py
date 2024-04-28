@@ -5,6 +5,7 @@ Data models, sql-definition and access routines.
 """
 
 # some structures are larger than pylint likes:
+# pylint: disable=too-many-lines
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-instance-attributes
 

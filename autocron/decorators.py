@@ -136,24 +136,31 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
     ``sendmail()`` will return from the call immediately and this
     callable will get executed later in another process.
 
-    Optional the decorator can get called with arguments specifying a defined delay expressed in weeks, days, hours and minutes like:
+    Optional the decorator can get called with arguments specifying a
+    defined delay expressed in weeks, days, hours and minutes. In the
+    next example the function ``sendmail()`` will get executed in five
+    minutes from now:
 
     >>> @delay(minutes=5)
     >>> def sendmail(recipient, message):
     >>>     # code goes here ...
 
-    The function ``sendmail()`` will get executed in five minutes from now.
+    If ``delay`` is called with arguments, all arguments must be
+    keyword-arguments.
 
     If the argument ``schedule`` is given, this must be a ``datetime``
-    object. In this case all other keyword-arguments are overridden; the
+    object. In this case all other keyword-arguments are ignored; the
     decorated function will get executed at the given ``schedule`` if
     the schedule is a date in the future. If the ``schedule`` is in the
     past the function will get executed as soon as possibel.
 
     The decorated function will return a Result-instance. If autocron is
-    active the result will be in waiting mode and may not be in the
-    database because the dataset gets created in a separate thread. If
-    autocron is not active, the result-instance will be in ready- or
+    active the result will be in waiting mode and may not be immediately
+    in the database because the Result-dataset gets created in a
+    separate thread. This dataset is updated with the result or
+    error-message after function-execution.
+
+    If autocron is not active, the result-instance will be in ready- or
     error-mode, depending on the function call.
     """
 
@@ -163,7 +170,9 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
         if schedule:
             return schedule
         if weeks or days or hours or minutes:
-            delta = datetime.timedelta(weeks=weeks, days=days, hours=hours, minutes=minutes)
+            delta = datetime.timedelta(
+                weeks=weeks, days=days, hours=hours, minutes=minutes
+            )
             now = datetime.datetime.now()
             return now + delta
         return None
