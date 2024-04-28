@@ -11,7 +11,6 @@ the standard-library.
 #
 # license: MIT
 
-
 from autocron.decorators import (
     cron,
     delay,

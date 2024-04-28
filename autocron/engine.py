@@ -13,7 +13,6 @@ handles this.
 #
 # license: MIT
 
-
 import os
 import pathlib
 import signal
@@ -49,6 +48,7 @@ class Engine:
     start the monitor thread. The monitor-thread in turn starts and
     supervise the workers. (The interface argument is used for testing.)
     """
+
     def __init__(self, interface=None):
         # the ìnterface argument is for testing. In production this
         # argument is not provided for initialization.
@@ -143,7 +143,6 @@ class Engine:
         # check whether the process monitors the workers,
         # but dont't start the monitor twice:
         if self.interface.acquire_monitor_lock() and not self.monitor_thread:
-
             # adapt number of workers if given
             if workers is not None:
                 # override the already loaded value

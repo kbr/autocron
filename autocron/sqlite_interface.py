@@ -15,7 +15,6 @@ Data models, sql-definition and access routines.
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-instance-attributes
 
-
 import datetime
 import functools
 import pathlib
@@ -53,7 +52,7 @@ SETTINGS_DEFAULT_DATA = {
     "monitor_idle_time": SETTINGS_DEFAULT_MONITOR_IDLE_TIME,
     "worker_idle_time": SETTINGS_DEFAULT_WORKER_IDLE_TIME,
     "worker_pids": SETTINGS_DEFAULT_WORKER_PIDS,
-    "result_ttl": SETTINGS_DEFAULT_RESULT_TTL
+    "result_ttl": SETTINGS_DEFAULT_RESULT_TTL,
 }
 
 BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
@@ -112,6 +111,7 @@ def db_access(function):
             if not retry_num % SQLITE_DELAY_INCREMENT_STEPS:
                 delay *= SQLITE_DELAY_INCREMENT_FACTOR
         raise sqlite3.OperationalError(message)
+
     return wrapper
 
 
@@ -146,23 +146,20 @@ class Model:
         return self.rowid
 
     def update(self):
-        """Make the current set of attributes persistent.
-        """
+        """Make the current set of attributes persistent."""
         columns = ",".join(f"{name} = :{name}" for name in self.columns)
         sql = f"""UPDATE {self.table_name} SET {columns}
                   WHERE rowid == :rowid"""
         self.connection.run(sql, self.__dict__)
 
     def delete(self):
-        """Delete this instance by the rowid.
-        """
+        """Delete this instance by the rowid."""
         sql = f"DELETE FROM {self.table_name} WHERE rowid == {self.rowid}"
         self.connection.run(sql)
 
     @classmethod
     def _get_sql_select(cls):
-        """Helper function for the select-classmethods.
-        """
+        """Helper function for the select-classmethods."""
         columns = list(cls.columns.keys())
         columns.append("rowid")
         columns = ",".join(columns)
@@ -210,8 +207,7 @@ class Model:
 
     @classmethod
     def create_table(cls, connection):
-        """Create the database table for the model if not already existing.
-        """
+        """Create the database table for the model if not already existing."""
         columns = ",".join(
             f"{field} {type}" for field, type in cls.columns.items()
         )
@@ -221,15 +217,13 @@ class Model:
 
     @classmethod
     def count_rows(cls, connection):
-        """Return the number of rows in the table.
-        """
+        """Return the number of rows in the table."""
         cursor = connection.run(f"SELECT COUNT(*) FROM {cls.table_name}")
         return cursor.fetchone()[0]
 
 
 class Task(Model):
-    """Model to store functions for later execution.
-    """
+    """Model to store functions for later execution."""
 
     table_name = "task"
     columns = {
@@ -239,7 +233,7 @@ class Task(Model):
         "crontab": "TEXT",
         "function_module": "TEXT",
         "function_name": "TEXT",
-        "function_arguments": "BLOB"
+        "function_arguments": "BLOB",
     }
 
     def __init__(
@@ -251,7 +245,7 @@ class Task(Model):
         uuid="",
         crontab="",
         schedule=None,
-        status=TASK_STATUS_WAITING
+        status=TASK_STATUS_WAITING,
     ):
         super().__init__(connection=connection)
         self.func = func
@@ -281,16 +275,14 @@ class Task(Model):
         super().store()
 
     def update(self):
-        """Make the current state of attributes persistent.
-        """
+        """Make the current state of attributes persistent."""
         # function arguments may have changed:
         self.function_arguments = pickle.dumps((self.args, self.kwargs))
         super().update()
 
     @classmethod
     def _get_next_task_sql_and_data(cls):
-        """Helper method for next_task and next_cron_task.
-        """
+        """Helper method for next_task and next_cron_task."""
         sql = cls._get_sql_select()
         sql = f"""{sql} WHERE schedule <= :schedule
                   AND status == {TASK_STATUS_WAITING}"""
@@ -308,36 +300,32 @@ class Task(Model):
                         AND function_name == :function_name"""
         data = {
             "function_module": function.__module__,
-            "function_name": function.__name__
+            "function_name": function.__name__,
         }
         return cls.select(connection=connection, sql=sql, data=data)
 
     @classmethod
     def next_task(cls, connection):
-        """Returns a task instance which is on due.
-        """
+        """Returns a task instance which is on due."""
         sql, data = cls._get_next_task_sql_and_data()
         return cls.select(connection, sql=sql, data=data)
 
     @classmethod
     def next_cron_task(cls, connection):
-        """Returns a crontask instance which is on due.
-        """
+        """Returns a crontask instance which is on due."""
         sql, data = cls._get_next_task_sql_and_data()
         sql = f"{sql} AND crontab <> ''"
         return cls.select(connection, sql=sql, data=data)
 
     @classmethod
     def delete_crontasks(cls, connection):
-        """Delete all task which are cron-tasks.
-        """
+        """Delete all task which are cron-tasks."""
         sql = f"DELETE FROM {cls.table_name} WHERE crontab <> ''"
         connection.run(sql)
 
     @classmethod
     def change_status(cls, connection, prev_status, new_status):
-        """Change the status of a task from a given one to a new one.
-        """
+        """Change the status of a task from a given one to a new one."""
         sql = f"""UPDATE {cls.table_name} SET status = :new_status
                   WHERE status == :prev_status"""
         data = {"prev_status": prev_status, "new_status": new_status}
@@ -363,8 +351,7 @@ class Task(Model):
 
 
 class Result(Model):
-    """The model to store function result of delayed executed tasks.
-    """
+    """The model to store function result of delayed executed tasks."""
 
     table_name = "result"
     columns = {
@@ -375,7 +362,7 @@ class Result(Model):
         "function_arguments": "BLOB",
         "function_result": "BLOB",
         "error_message": "TEXT",
-        "ttl": "datetime"
+        "ttl": "datetime",
     }
 
     def __init__(
@@ -389,10 +376,10 @@ class Result(Model):
         uuid="",
         status=TASK_STATUS_WAITING,
         ttl=None,
-        function_name = "",
-        function_module = "",
-        function_arguments = None,
-        rowid = None
+        function_name="",
+        function_module="",
+        function_arguments=None,
+        rowid=None,
     ):
         super().__init__(connection=connection)
         self.rowid = rowid
@@ -443,8 +430,7 @@ class Result(Model):
         return True
 
     def store(self):
-        """Stores the result as a new entry in the result-table.
-        """
+        """Stores the result as a new entry in the result-table."""
         if self.func:
             self.function_module = self.func.__module__
             self.function_name = self.func.__name__
@@ -456,16 +442,27 @@ class Result(Model):
         super().store()
 
     @classmethod
-    def from_registration(cls, func, args, kwargs, uuid="",
-                          status=TASK_STATUS_WAITING,
-                          function_result=None, error_message=""):
+    def from_registration(
+        cls,
+        func,
+        args,
+        kwargs,
+        uuid="",
+        status=TASK_STATUS_WAITING,
+        function_result=None,
+        error_message="",
+    ):
         """
         Return a new instance with the given arguments as attributes.
         """
         return cls(
-            func=func, args=args, kwargs=kwargs, uuid=uuid,
-            function_result=function_result,status=status,
-            error_message=error_message
+            func=func,
+            args=args,
+            kwargs=kwargs,
+            uuid=uuid,
+            function_result=function_result,
+            status=status,
+            error_message=error_message,
         )
 
     @classmethod
@@ -520,7 +517,7 @@ class Settings(Model):
         "monitor_idle_time": "INTEGER",
         "worker_idle_time": "INTEGER",
         "worker_pids": "TEXT",
-        "result_ttl": "INTEGER"
+        "result_ttl": "INTEGER",
     }
 
     def __init__(self, connection=None, data=None):
@@ -536,8 +533,7 @@ class Settings(Model):
         self.__dict__.update(data)
 
     def __repr__(self):
-        """Self representation used by the admin-tool.
-        """
+        """Self representation used by the admin-tool."""
         width = len(max(self.columns, key=len))
         attributes = []
         for key in self.columns:
@@ -563,8 +559,10 @@ class Settings(Model):
         to a dictionary.
         """
         column_names = [entry[0] for entry in cursor.description]
-        data = {name: bool(value) if name in BOOLEAN_SETTINGS else value
-                for name, value in zip(column_names, row)}
+        data = {
+            name: bool(value) if name in BOOLEAN_SETTINGS else value
+            for name, value in zip(column_names, row)
+        }
         return data
 
 
@@ -580,23 +578,26 @@ class TaskRegistrator:
         self.exit_event = threading.Event()
         self.registration_thread = None
 
-    def register(self, func, args=(), kwargs=None,
-                       crontab="", uuid="", schedule=None):
+    def register(
+        self, func, args=(), kwargs=None, crontab="", uuid="", schedule=None
+    ):
         """
         Register a task for later processing. Arguments are the same as
         for `SQLiteInterface.register_task()` which is called from a
-        seperate thread.
+        separate thread.
         """
         if kwargs is None:
             kwargs = {}
-        self.task_queue.put({
-            "func": func,
-            "schedule": schedule,
-            "crontab": crontab,
-            "uuid": uuid,
-            "args": args,
-            "kwargs": kwargs,
-        })
+        self.task_queue.put(
+            {
+                "func": func,
+                "schedule": schedule,
+                "crontab": crontab,
+                "uuid": uuid,
+                "args": args,
+                "kwargs": kwargs,
+            }
+        )
 
     def _process_queue(self):
         """
@@ -652,8 +653,7 @@ class SQLiteConnection:
 
     def __enter__(self):
         self.connection = sqlite3.connect(
-            database=self.db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES
+            database=self.db_name, detect_types=sqlite3.PARSE_DECLTYPES
         )
         if self.row_factory:
             self.connection.row_factory = self.row_factory
@@ -795,8 +795,9 @@ class SQLiteInterface:
                 self.result_ttl = settings.result_ttl
 
     @db_access
-    def register_task(self, func, schedule=None, crontab="", uuid="",
-                      args=(), kwargs=None):
+    def register_task(
+        self, func, schedule=None, crontab="", uuid="", args=(), kwargs=None
+    ):
         """
         Store a callable in the task-table of the database. If the
         callable is a delayed task with a potential result create also a
@@ -820,7 +821,7 @@ class SQLiteInterface:
                     crontab=crontab,
                     uuid=uuid,
                     args=args,
-                    kwargs=kwargs
+                    kwargs=kwargs,
                 )
                 task.store()
 
@@ -833,7 +834,7 @@ class SQLiteInterface:
                         args=args,
                         kwargs=kwargs,
                         uuid=uuid,
-                        ttl=self.result_ttl
+                        ttl=self.result_ttl,
                     )
                     result.store()
 
@@ -853,8 +854,7 @@ class SQLiteInterface:
 
     @db_access
     def update_task_schedule(self, task, schedule):
-        """Updates the schedule of the given task.
-        """
+        """Updates the schedule of the given task."""
         with Connection(self.db_name) as conn:
             task.connection = conn
             task.schedule = schedule
@@ -863,22 +863,19 @@ class SQLiteInterface:
 
     @db_access
     def count_tasks(self):
-        """Return the number of entries in the task-table.
-        """
+        """Return the number of entries in the task-table."""
         with Connection(self.db_name) as conn:
             return Task.count_rows(conn)
 
     @db_access
     def get_tasks(self):
-        """Return a list of all tasks.
-        """
+        """Return a list of all tasks."""
         with Connection(self.db_name) as conn:
             return Task.select_all(conn)
 
     @db_access
     def delete_task(self, task):
-        """Delete the task which may not have a valid connection-attribute.
-        """
+        """Delete the task which may not have a valid connection-attribute."""
         # solution: inject a valid connection
         with Connection(self.db_name) as conn:
             task.connection = conn
@@ -894,19 +891,12 @@ class SQLiteInterface:
 
     @db_access
     def count_results(self):
-        """Return the number of entries in the task-table.
-        """
+        """Return the number of entries in the task-table."""
         with Connection(self.db_name) as conn:
             return Result.count_rows(conn)
 
     @db_access
-    def update_result(
-        self,
-        uuid,
-        result=None,
-        error_message="",
-        ttl=None
-    ):
+    def update_result(self, uuid, result=None, error_message="", ttl=None):
         """
         Updates the result with the uuid with the values of the
         arguments result and error_message.
@@ -925,8 +915,7 @@ class SQLiteInterface:
 
     @db_access
     def delete_outdated_results(self):
-        """Delete all resuts with a ttl <= now.
-        """
+        """Delete all resuts with a ttl <= now."""
         with Connection(self.db_name) as conn:
             Result.delete_outdated(conn, datetime.datetime.now())
 
@@ -963,8 +952,7 @@ class SQLiteInterface:
 
     @db_access
     def is_worker_pid(self, pid):
-        """Check whether the provided pid is one of the worker pids.
-        """
+        """Check whether the provided pid is one of the worker pids."""
         with Connection(self.db_name) as conn:
             settings = Settings.read(connection=conn)
         pids = (int(p) for p in settings.worker_pids.split(",") if p)
@@ -988,15 +976,13 @@ class SQLiteInterface:
 
     @db_access
     def get_settings(self):
-        """Returns the settings dataset.
-        """
+        """Returns the settings dataset."""
         with Connection(self.db_name) as conn:
             return Settings.read(connection=conn)
 
     @db_access
     def update_settings(self, settings):
-        """Updates the settings dataset.
-        """
+        """Updates the settings dataset."""
         with Connection(self.db_name) as conn:
             settings.connection = conn
             settings.update()
@@ -1021,5 +1007,5 @@ class SQLiteInterface:
             Task.change_status(
                 conn,
                 prev_status=TASK_STATUS_PROCESSING,
-                new_status=TASK_STATUS_WAITING
+                new_status=TASK_STATUS_WAITING,
             )

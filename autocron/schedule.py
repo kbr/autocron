@@ -30,7 +30,6 @@ range like "a,b,m-n,c,p-q" is allowed.
 #
 # license: MIT
 
-
 import calendar
 import datetime
 import re
@@ -112,7 +111,7 @@ def get_cron_parts(crontab):
             CRONTAB_PARTS,
             crontab.split(),
             CRONTAB_MIN_VALUES,
-            CRONTAB_MAX_VALUES
+            CRONTAB_MAX_VALUES,
         )
     }
     return types.SimpleNamespace(**data)
@@ -148,7 +147,7 @@ def get_weekday(year=None, month=None, day=None, schedule=None):
     return 0 if weekday > 6 else weekday
 
 
-class CronScheduler():
+class CronScheduler:
     """
     Schedules a cron task.
 
@@ -159,20 +158,23 @@ class CronScheduler():
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self,
-                 crontab=None,
-                 minutes=None,
-                 hours=None,
-                 days=None,
-                 months=None,
-                 days_of_week=None,
-                 strict_mode=False):
+    def __init__(
+        self,
+        crontab=None,
+        minutes=None,
+        hours=None,
+        days=None,
+        months=None,
+        days_of_week=None,
+        strict_mode=False,
+    ):
         if not crontab:
-            items = [str(item) if item else "*"
-                     for item in (minutes, hours, days, months, days_of_week)]
+            items = [
+                str(item) if item else "*"
+                for item in (minutes, hours, days, months, days_of_week)
+            ]
             crontab = CRONTAB_SUBSTITUTE.sub(
-                lambda mo: " " if mo.group() == "_" else "",
-                "_".join(items)
+                lambda mo: " " if mo.group() == "_" else "", "_".join(items)
             )
         self.cron_parts = get_cron_parts(crontab)
         self.strict_mode = strict_mode
@@ -299,8 +301,7 @@ class CronScheduler():
             day = 1
         weekday_of_day = get_weekday(year, month, day)
         next_weekday = get_next_value(
-            weekday_of_day,
-            self.cron_parts.days_of_week
+            weekday_of_day, self.cron_parts.days_of_week
         )
         if next_weekday is None:
             next_weekday = self.cron_parts.days_of_week[0] + DAYS_PER_WEEK

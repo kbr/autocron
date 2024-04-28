@@ -10,7 +10,6 @@ process.
 #
 # license: MIT
 
-
 import datetime
 import uuid
 
@@ -20,7 +19,7 @@ from .sqlite_interface import (
     TASK_STATUS_READY,
     TASK_STATUS_ERROR,
     Result,
-    SQLiteInterface
+    SQLiteInterface,
 )
 
 
@@ -31,12 +30,14 @@ interface = SQLiteInterface()
 
 
 # pylint: disable=too-many-arguments
-def cron(crontab=None,
-         minutes=None,
-         hours=None,
-         days=None,
-         months=None,
-         days_of_week=None):
+def cron(
+    crontab=None,
+    minutes=None,
+    hours=None,
+    days=None,
+    months=None,
+    days_of_week=None,
+):
     """
     Decorator for a cronjob. Functions running cronjobs should not get
     called from the main program and therefore don't get arguments.
@@ -119,15 +120,12 @@ def cron(crontab=None,
             days=days,
             months=months,
             days_of_week=days_of_week,
-            crontab=crontab
+            crontab=crontab,
         )
         schedule = scheduler.get_next_schedule()
-        interface.registrator.register(
-            func,
-            schedule=schedule,
-            crontab=crontab
-        )
+        interface.registrator.register(func, schedule=schedule, crontab=crontab)
         return func
+
     return wrapper
 
 
@@ -211,9 +209,12 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
                 error_message = ""
                 status = TASK_STATUS_READY
             result = Result.from_registration(
-                function, args, kwargs, status=status,
+                function,
+                args,
+                kwargs,
+                status=status,
                 function_result=function_result,
-                error_message=error_message
+                error_message=error_message,
             )
         else:
             # active: register in task_queue and return a Result-instance
@@ -224,12 +225,10 @@ def delay(*args, weeks=0, days=0, hours=0, minutes=0, schedule=None):
                 args=args,
                 kwargs=kwargs,
                 uuid=uuid_,
-                schedule=get_schedule()
+                schedule=get_schedule(),
             )
             result = Result.from_registration(
-                function, args, kwargs,
-                uuid=uuid_,
-                status=TASK_STATUS_WAITING
+                function, args, kwargs, uuid=uuid_, status=TASK_STATUS_WAITING
             )
         return result
 

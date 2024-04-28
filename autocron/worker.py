@@ -29,6 +29,7 @@ class Worker:
     Runs in a separate process for task-handling.
     Gets supervised and monitored from the engine.
     """
+
     def __init__(self, database_filename):
         self.active = True
         self.result = None
@@ -93,11 +94,11 @@ class Worker:
 
     def handle_task(self):
         """
-        Checks for a task on due and process the task. If there are no tasks to
-        handle the method return `False` indicating that the main loop
-        can switch to idle state. If a task have been handled, the
-        method return `True` to indicate that meanwhile more tasks may be
-        waiting.
+        Checks for a task on due and process the task. If there are no
+        tasks to handle the method return `False` indicating that the
+        main loop can switch to idle state. If a task have been handled,
+        the method return `True` to indicate that meanwhile more tasks
+        may be waiting.
         """
         task = self.interface.get_next_task()
         if task:
@@ -148,7 +149,7 @@ class Worker:
             self.interface.update_result(
                 uuid=task.uuid,
                 result=self.result,
-                error_message=self.error_message
+                error_message=self.error_message,
             )
         if task.crontab:
             # if the task has a crontab calculate new schedule

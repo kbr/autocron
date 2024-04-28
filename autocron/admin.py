@@ -10,7 +10,6 @@ Administration tool to access the database.
 #
 # license: MIT
 
-
 import argparse
 
 from autocron.sqlite_interface import (
@@ -29,16 +28,14 @@ PGM_DESCRIPTION = """
 
 
 class Admin:
-    """Collection of methods for administration-tasks.
-    """
+    """Collection of methods for administration-tasks."""
 
     def __init__(self, db_name):
         self.interface = SQLiteInterface()
         self.interface.init_database(db_name)
 
     def show_info(self):
-        """Tabular view of the settings.
-        """
+        """Tabular view of the settings."""
         settings = self.interface.get_settings()
         column_width = len(max(settings.columns, key=len))
         database = "database"
@@ -51,24 +48,21 @@ class Admin:
         print()
 
     def set_max_workers(self, workers):
-        """Set the number of workers.
-        """
+        """Set the number of workers."""
         settings = self.interface.get_settings()
         settings.max_workers = workers
         self.interface.update_settings(settings)
         print(f"set max_workers to {workers}")
 
     def set_autocron_lock(self, flag):
-        """Set the autocron_lock flag.
-        """
+        """Set the autocron_lock flag."""
         settings = self.interface.get_settings()
         settings.autocron_lock = convert_flag(flag)
         self.interface.update_settings(settings)
         print(f"set autocron lock to {flag}")
 
     def set_monitor_lock(self, flag):
-        """Set the monitor_lock flag.
-        """
+        """Set the monitor_lock flag."""
         settings = self.interface.get_settings()
         settings.monitor_lock = convert_flag(flag)
         self.interface.update_settings(settings)
@@ -105,8 +99,7 @@ class Admin:
         print(f"Set result-ttl to {ttl} seconds")
 
     def set_defaults(self):
-        """Reset all settings to the default values.
-        """
+        """Reset all settings to the default values."""
         settings = self.interface.get_settings()
         settings.__dict__.update(SETTINGS_DEFAULT_DATA)
         self.interface.update_settings(settings)
@@ -119,7 +112,7 @@ class Admin:
         next start of the admin-tool or autocron.
         """
         answer = input("sure to delete the current database? [y/n]: ")
-        if answer.lower() == 'y':
+        if answer.lower() == "y":
             self.interface.db_name.unlink(missing_ok=True)
             self.interface.db_name = None
         else:
@@ -141,74 +134,70 @@ def print_usage():
 
 
 def get_command_line_arguments():
-    """Get the command line arguments.
-    """
+    """Get the command line arguments."""
     parser = argparse.ArgumentParser(
         prog=PGM_NAME,
         description=PGM_DESCRIPTION,
         formatter_class=argparse.RawTextHelpFormatter,
     )
+    parser.add_argument("database", help="database name or path.")
     parser.add_argument(
-        "database",
-        help="database name or path."
-    )
-    parser.add_argument(
-        "-i", "--info",
+        "-i",
+        "--info",
         action="store_true",
-        help="provide information about the settings and process data."
+        help="provide information about the settings and process data.",
     )
     parser.add_argument(
         "--set-max-workers",
         dest="max_workers",
         type=int,
-        help="set number of worker processes."
+        help="set number of worker processes.",
     )
     parser.add_argument(
         "--set-autocron-lock",
         dest="autocron_lock",
-        help="set autocron lock flag: [true|false or on|off]."
+        help="set autocron lock flag: [true|false or on|off].",
     )
     parser.add_argument(
         "--set-monitor-lock",
         dest="monitor_lock",
-        help="set monitor lock flag: [true|false or on|off]."
+        help="set monitor lock flag: [true|false or on|off].",
     )
     parser.add_argument(
         "--set-worker-idle-time",
         dest="worker_idle_time",
         type=int,
-        help="set worker idle time in seconds [set to 0 for auto-calculation]."
+        help="set worker idle time in seconds [set to 0 for auto-calculation].",
     )
     parser.add_argument(
         "--set-monitor-idle-time",
         dest="monitor_idle_time",
         type=int,
-        help="set monitor idle time in seconds."
+        help="set monitor idle time in seconds.",
     )
     parser.add_argument(
         "--set-result-ttl",
         dest="result_ttl",
         type=int,
-        help="set result time to life in seconds."
+        help="set result time to life in seconds.",
     )
     parser.add_argument(
         "--set-defaults",
         dest="set_defaults",
         action="store_true",
-        help="reset to default settings."
+        help="reset to default settings.",
     )
     parser.add_argument(
         "--delete-database",
         dest="delete_database",
         action="store_true",
-        help="delete the current database."
+        help="delete the current database.",
     )
     return parser.parse_args()
 
 
 def main():
-    """entry point.
-    """
+    """entry point."""
     args = get_command_line_arguments()
     admin = Admin(args.database)
     if args.info:
