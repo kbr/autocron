@@ -21,7 +21,7 @@ from autocron.sqlite_interface import SQLiteInterface
 
 
 __all__ = ["cron", "delay", "start", "stop"]
-__version__ = "1.0"
+__version__ = "1.1.0-dev"
 
 _engine = Engine()
 _interface = SQLiteInterface()
