@@ -11,6 +11,7 @@ Administration tool to access the database.
 # license: MIT
 
 import argparse
+import shutil
 
 from autocron.sqlite_interface import (
     SQLiteInterface,
@@ -45,6 +46,20 @@ class Admin:
         results = self.interface.count_results()
         for name, value in zip(("tasks", "results"), (tasks, results)):
             print(f"{name:<{column_width}}: {value}")
+        print()
+
+    def show_pending_tasks(self):
+        """Tabular view of pending tasks."""
+        header = "schedule"
+        header += " " * (20 - len(header))
+        header += "task"
+        print(f"\n{header}")
+        columns, _ = shutil.get_terminal_size()
+        line = "-" * columns
+        print(line)
+        tasks = self.interface.get_tasks()
+        for task in tasks:
+            print(task)
         print()
 
     def set_max_workers(self, workers):
@@ -148,6 +163,12 @@ def get_command_line_arguments():
         help="provide information about the settings and process data.",
     )
     parser.add_argument(
+        "-t",
+        "--tasks",
+        action="store_true",
+        help="view all pending tasks",
+    )
+    parser.add_argument(
         "--set-max-workers",
         dest="max_workers",
         type=int,
@@ -202,6 +223,8 @@ def main():
     admin = Admin(args.database)
     if args.info:
         admin.show_info()
+    elif args.tasks:
+        admin.show_pending_tasks()
     elif args.max_workers:
         admin.set_max_workers(args.max_workers)
     elif args.autocron_lock:

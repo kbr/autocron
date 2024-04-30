@@ -259,6 +259,11 @@ class Task(Model):
         self.function_name = None
         self.function_arguments = None
 
+    def __str__(self):
+        return f"{self.schedule:%Y-%m-%d %H:%M:%S} "\
+               f"{self.function_module}.{self.function_name} "\
+               f"{self.args} {self.kwargs}"
+
     def store(self):
         """
         Store a new task in the database. Returns the rowid of the new dataset.
