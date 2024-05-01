@@ -270,9 +270,11 @@ class Task(Model):
         self.function_arguments = None
 
     def __str__(self):
-        return f"{self.schedule:%Y-%m-%d %H:%M:%S} "\
-               f"{self.function_module}.{self.function_name} "\
-               f"{self.args} {self.kwargs}"
+        return (
+            f"{self.schedule:%Y-%m-%d %H:%M:%S} "
+            f"{self.function_module}.{self.function_name} "
+            f"{self.args} {self.kwargs}"
+        )
 
     def store(self):
         """
@@ -417,8 +419,10 @@ class Result(Model):
             result = self.error_message
         else:
             result = self.function_result
-        message = f"{status:<{STATUS_MESSAGE_MAX_LEN}}: "\
-                  f"{self.function_module}.{self.function_name}"
+        message = (
+            f"{status:<{STATUS_MESSAGE_MAX_LEN}}: "
+            f"{self.function_module}.{self.function_name}"
+        )
         if self.function_arguments:
             args, kwargs = self.function_arguments
             message += f"\n{indent}{args} {kwargs}"

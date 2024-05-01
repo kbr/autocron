@@ -6,6 +6,7 @@ development
 -----------
 
 - the delay decorator can take optional arguments to specify a defined delay
+- admin can display waiting tasks and stored results
 - conda installation package added
 - nox combined with ruff
 

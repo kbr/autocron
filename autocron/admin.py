@@ -64,7 +64,7 @@ class Admin:
 
     def show_results(self):
         """view the results"""
-        print(f"\nresults")
+        print("\nresults")
         columns, _ = shutil.get_terminal_size()
         line = "-" * columns
         print(line)
