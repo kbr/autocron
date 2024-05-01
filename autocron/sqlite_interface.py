@@ -64,6 +64,16 @@ TASK_STATUS_READY = 3
 TASK_STATUS_ERROR = 4
 TASK_STATUS_UNAVAILABLE = 5
 
+STATUS_MESSAGES = {
+    TASK_STATUS_WAITING: "waiting",
+    TASK_STATUS_PROCESSING: "processing",
+    TASK_STATUS_READY: "ready",
+    TASK_STATUS_ERROR: "error",
+    TASK_STATUS_UNAVAILABLE: "unavailable",
+}
+
+STATUS_MESSAGE_MAX_LEN = len(max(STATUS_MESSAGES.values(), key=len))
+
 
 # sqlite3 default adapters and converters deprecated as of Python 3.12:
 def datetime_adapter(value):
@@ -399,6 +409,22 @@ class Result(Model):
         self.function_result = function_result
         self.error_message = error_message
         self.ttl = ttl if ttl else datetime.datetime.now()
+
+    def __str__(self):
+        status = STATUS_MESSAGES[self.status]
+        indent = " " * (STATUS_MESSAGE_MAX_LEN + 2)
+        if self.error_message:
+            result = self.error_message
+        else:
+            result = self.function_result
+        message = f"{status:<{STATUS_MESSAGE_MAX_LEN}}: "\
+                  f"{self.function_module}.{self.function_name}"
+        if self.function_arguments:
+            args, kwargs = self.function_arguments
+            message += f"\n{indent}{args} {kwargs}"
+        if result:
+            message += f"\n{indent}{result}"
+        return message
 
     @property
     def has_error(self):
@@ -885,6 +911,12 @@ class SQLiteInterface:
         with Connection(self.db_name) as conn:
             task.connection = conn
             task.delete()
+
+    @db_access
+    def get_results(self):
+        """Return a list of all results."""
+        with Connection(self.db_name) as conn:
+            return Result.select_all(conn)
 
     @db_access
     def get_result_by_uuid(self, uuid):

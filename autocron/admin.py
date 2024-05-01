@@ -62,6 +62,17 @@ class Admin:
             print(task)
         print()
 
+    def show_results(self):
+        """view the results"""
+        print(f"\nresults")
+        columns, _ = shutil.get_terminal_size()
+        line = "-" * columns
+        print(line)
+        results = self.interface.get_results()
+        for result in results:
+            print(result)
+        print()
+
     def set_max_workers(self, workers):
         """Set the number of workers."""
         settings = self.interface.get_settings()
@@ -169,6 +180,12 @@ def get_command_line_arguments():
         help="view all pending tasks",
     )
     parser.add_argument(
+        "-r",
+        "--results",
+        action="store_true",
+        help="view stored results",
+    )
+    parser.add_argument(
         "--set-max-workers",
         dest="max_workers",
         type=int,
@@ -225,6 +242,8 @@ def main():
         admin.show_info()
     elif args.tasks:
         admin.show_pending_tasks()
+    elif args.results:
+        admin.show_results()
     elif args.max_workers:
         admin.set_max_workers(args.max_workers)
     elif args.autocron_lock:
