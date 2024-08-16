@@ -18,13 +18,6 @@ def pytest(session):
     session.run("pytest", *testfiles)
 
 
-@nox.session
-def pylint(session):
-    session.install("-e", ".")
-    session.install("pylint")
-    session.run("pylint", "autocron")
-
-
 @nox.session(name="check")
 def ruff_check(session):
     # local development setup:
