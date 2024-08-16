@@ -11,6 +11,7 @@ autocron.db
 autocron.egg-info
 build/
 dist/
-docs/build/*
-docs/requirements/requirements.txt
+docs_build/
+docs/requirements.local.in
+docs/requirements.txt
 test.db

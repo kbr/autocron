@@ -785,6 +785,9 @@ class SQLiteInterface:
                 except RuntimeError:
                     # no home directory found
                     path = pathlib.Path.cwd() / db_name
+                else:
+                    # create DEFAULT_STORAGE in home directory if not existing:
+                    path.parent.mkdir(exist_ok=True)
             self._db_name = path
 
     @property

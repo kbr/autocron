@@ -2,13 +2,14 @@ Version History
 ===============
 
 
-development
------------
+1.1.0 - 2024-08-16
+------------------
 
-- the delay decorator can take optional arguments to specify a defined delay
-- admin can display waiting tasks and stored results
-- conda installation package added
-- nox combined with ruff
+- delay decorator can take optional arguments to specify a defined delay.
+- configuration and semaphore-flags moved to the database.
+- conda installation package added.
+- nox combined with ruff.
+- bugfix: create default-storage directory in case it does not exist. (#3)
 
 
 1.0 - 2024-04-17

@@ -8,15 +8,15 @@ autocron documentation
 
 **autocron** makes use of the ``SQLite`` database as storage and handles multi-processing access to the database in a non-blocking way for the application. ``SQLite`` is fast enough for low- to medium-traffic sites. Which are most websites.
 
-    **The idea** behind ``autocron`` is to make the integration of an asynchronous task handler for web-applications as easy as possible. Also there is no adminstration overhead to manage consumer or worker processes. The target audience are web-applications that don't need massive scaling –  which are most websites. However, vertical scaling will work. For horizontal scaling autocron is currently not designed (but may be in the future).
+    **The idea** behind ``autocron`` is to make the integration of an asynchronous task handler for web-applications as easy as possible. Also there is no adminstration overhead to manage consumer or worker processes. The target audience are web-applications that don't need massive scaling. However, vertical scaling will work. For horizontal scaling autocron is currently not designed (but may be in the future).
 
-All configurations are preset with useful values and can get inspected and modified by the ``autocron`` command-line based :ref:`Admin Interface <admin-iterface>`.
+All configurations are preset with default values and can get inspected and modified by the ``autocron`` command-line based :ref:`Admin Interface <admin-iterface>`.
 
 
 Installation
 ------------
 
-**autocron** requires Python >= 3.8. The package is available on `PyPi <https://pypi.org/project/autocron/>`_ and installable by `pip <https://pypi.org/project/pip/>`_:  ::
+**autocron** requires Python ``>= 3.8``. The package is available on `PyPi <https://pypi.org/project/autocron/>`_ and installable by `pip <https://pypi.org/project/pip/>`_:  ::
 
     $ pip install autocron
 
