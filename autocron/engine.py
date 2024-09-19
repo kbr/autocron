@@ -85,7 +85,8 @@ class Engine:
                     time.sleep(WORKER_START_DELAY)
             if self.exit_event.wait(timeout=timeout):
                 break
-#         sys.exit()  # escape from the thread
+
+    #         sys.exit()  # escape from the thread
 
     def set_signal_handlers(self):
         """
@@ -109,7 +110,6 @@ class Engine:
         """
         for signalnum, signalhandler in self.orig_signal_handlers.items():
             signal.signal(signalnum, signalhandler)
-
 
     def start(self, database_file, workers=None):
         """

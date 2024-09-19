@@ -39,7 +39,7 @@ Here is an example how to use autocron with the **flask** web-framework: ::
     from flask import Flask
 
     app = Flask(__name__)
-    autocron.start("project.db")
+    autocron.start("project.db", workers=2)
 
     @autocron.cron("* * * * *")
     def cronjob():
@@ -59,6 +59,8 @@ Here is an example how to use autocron with the **flask** web-framework: ::
 
 
 The command ``$ flask --app application run`` will start the application and ``autocron.start()`` starts the background workers. When the application stops, the workers are also shut down.
+
+The argument ``workers`` is optional and can be set by the cli admin tool. For simple applications 1 up to 4 workers could be enough (as a rule of thumb don't start more workers than available cpu cores).
 
 **What next?** For further details refer how to :ref:`integrate<integration>` autocron to different web-frameworks.
 

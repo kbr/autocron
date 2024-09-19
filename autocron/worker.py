@@ -102,7 +102,6 @@ class Worker:
                         break
                     idle_time -= 1
 
-
     def handle_task(self):
         """
         Checks for a task on due and process the task. If there are no
