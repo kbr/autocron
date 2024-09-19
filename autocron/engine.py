@@ -85,6 +85,7 @@ class Engine:
                     time.sleep(WORKER_START_DELAY)
             if self.exit_event.wait(timeout=timeout):
                 break
+#         sys.exit()  # escape from the thread
 
     def set_signal_handlers(self):
         """
@@ -101,6 +102,14 @@ class Engine:
         for signalnum in signalnums:
             self.orig_signal_handlers[signalnum] = signal.getsignal(signalnum)
             signal.signal(signalnum, self._terminate)
+
+    def reset_signal_handlers(self):
+        """
+        Reset the original signal handlers.
+        """
+        for signalnum, signalhandler in self.orig_signal_handlers.items():
+            signal.signal(signalnum, signalhandler)
+
 
     def start(self, database_file, workers=None):
         """
@@ -198,5 +207,5 @@ class Engine:
         # which is not used here.
         # pylint: disable=unused-argument
         self.stop()
-        signal.signal(signalnum, self.orig_signal_handlers[signalnum])
+        self.reset_signal_handlers()
         signal.raise_signal(signalnum)  # requires Python >= 3.8

@@ -4,7 +4,7 @@ test_worker.py
 test worker functionality. Start and stop of worker process is testet in
 test_engine.py
 """
-0
+
 import pathlib
 
 import pytest

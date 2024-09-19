@@ -19,6 +19,13 @@ import time
 from autocron.schedule import CronScheduler
 from autocron import sqlite_interface
 
+# check for django, because this will need a modified setup and shutdown
+try:
+    import django
+except ImportError:
+    DJANGO_FRAMEWORK_IN_USE = False
+else:
+    DJANGO_FRAMEWORK_IN_USE = True
 
 # base idle time (in seconds) for auto-calculation
 DEFAULT_WORKER_IDLE_TIME = 1
@@ -45,6 +52,8 @@ class Worker:
         # prevent the interface to register functions from the worker-process:
         self.interface.accept_registrations = False
         self.worker_idle_time = self._get_worker_idle_time()
+        if DJANGO_FRAMEWORK_IN_USE:
+            django.setup()
 
     def _get_worker_idle_time(self):
         """
@@ -69,6 +78,7 @@ class Worker:
         `run()`. As a signal handler terminate must accept optional
         positional arguments.
         """
+        print("got terminate signal")
         self.active = False
 
     def run(self):
@@ -91,6 +101,7 @@ class Worker:
                     if not self.active:
                         break
                     idle_time -= 1
+
 
     def handle_task(self):
         """
@@ -174,3 +185,7 @@ def start_worker():
 
 if __name__ == "__main__":
     start_worker()
+    if DJANGO_FRAMEWORK_IN_USE:
+        os._exit(os.EX_OK)
+    else:
+        sys.exit(os.EX_OK)
