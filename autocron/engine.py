@@ -131,8 +131,10 @@ class Engine:
         # signal so other threads have no chance to terminate. This can result
         # in erratic behaviour or stalling.
         # As a workaround using django deactivate the reloader in debug mode
-        # or set the autocron-lock flag to false in the autocron-database.
-        self.interface.registrator.start()
+        # or set the autocron-lock flag to false in the autocron-database
+        # or set blocking-mode to true.
+        if not self.interface.blocking_mode:
+            self.interface.registrator.start()
         return result
 
     def stop(self):
@@ -157,7 +159,6 @@ class Engine:
         # a stackframe may be given to the signal-handler
         # which is not used here.
         # pylint: disable=unused-argument
-        print("self._terminate called")
         self.stop()
         self.reset_signal_handlers()
         signal.raise_signal(signalnum)  # requires Python >= 3.8

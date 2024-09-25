@@ -43,6 +43,7 @@ SETTINGS_DEFAULT_MONITOR_IDLE_TIME = 5  # seconds
 SETTINGS_DEFAULT_WORKER_IDLE_TIME = 0  # 0 seconds means auto idle time
 SETTINGS_DEFAULT_WORKER_PIDS = ""
 SETTINGS_DEFAULT_RESULT_TTL = 1800  # Storage time (time to live) in seconds
+SETTINGS_DEFAULT_BLOCKING_MODE = False
 
 SETTINGS_DEFAULT_DATA = {
     "max_workers": SETTINGS_DEFAULT_WORKERS,
@@ -53,9 +54,10 @@ SETTINGS_DEFAULT_DATA = {
     "worker_idle_time": SETTINGS_DEFAULT_WORKER_IDLE_TIME,
     "worker_pids": SETTINGS_DEFAULT_WORKER_PIDS,
     "result_ttl": SETTINGS_DEFAULT_RESULT_TTL,
+    "blocking_mode": SETTINGS_DEFAULT_BLOCKING_MODE,
 }
 
-BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock"]
+BOOLEAN_SETTINGS = ["monitor_lock", "autocron_lock", "blocking_mode"]
 
 # Status codes used for task-status the result-entries:
 TASK_STATUS_WAITING = 1
@@ -549,6 +551,7 @@ class Settings(Model):
         "running_workers": "INTEGER",
         "monitor_lock": "INTEGER",
         "autocron_lock": "INTEGER",
+        "blocking_mode": "INTEGER",
         "monitor_idle_time": "INTEGER",
         "worker_idle_time": "INTEGER",
         "worker_pids": "TEXT",
@@ -762,6 +765,7 @@ class SQLiteInterface:
         self.monitor_idle_time = None
         self.max_workers = None
         self.worker_idle_time = None
+        self.blocking_mode = None
         # the registrator for non blocking registration:
         self.registrator = TaskRegistrator(self)
 
@@ -834,6 +838,7 @@ class SQLiteInterface:
                 self.max_workers = settings.max_workers
                 self.worker_idle_time = settings.worker_idle_time
                 self.result_ttl = settings.result_ttl
+                self.blocking_mode = settings.blocking_mode
 
     @db_access
     def register_task(

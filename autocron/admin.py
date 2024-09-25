@@ -94,6 +94,13 @@ class Admin:
         self.interface.update_settings(settings)
         print(f"set monitor lock to {flag}")
 
+    def set_blocking_mode(self, flag):
+        """Set the blocking_mode flag."""
+        settings = self.interface.get_settings()
+        settings.blocking_mode = convert_flag(flag)
+        self.interface.update_settings(settings)
+        print(f"set blocking mode to {flag}")
+
     def set_worker_idle_time(self, idle_time):
         """
         Set the idle time of the worker in seconds. This is the time the
@@ -202,6 +209,11 @@ def get_command_line_arguments():
         help="set monitor lock flag: [true|false or on|off].",
     )
     parser.add_argument(
+        "--set-blocking-mode",
+        dest="blocking_mode",
+        help="set blocking mode flag: [true|false or on|off].",
+    )
+    parser.add_argument(
         "--set-worker-idle-time",
         dest="worker_idle_time",
         type=int,
@@ -250,6 +262,8 @@ def main():
         admin.set_autocron_lock(args.autocron_lock)
     elif args.monitor_lock:
         admin.set_monitor_lock(args.monitor_lock)
+    elif args.blocking_mode:
+        admin.set_blocking_mode(args.blocking_mode)
     elif args.worker_idle_time:
         admin.set_worker_idle_time(args.worker_idle_time)
     elif args.monitor_idle_time:
