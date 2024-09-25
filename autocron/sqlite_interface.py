@@ -623,16 +623,19 @@ class TaskRegistrator:
         """
         if kwargs is None:
             kwargs = {}
-        self.task_queue.put(
-            {
-                "func": func,
-                "schedule": schedule,
-                "crontab": crontab,
-                "uuid": uuid,
-                "args": args,
-                "kwargs": kwargs,
-            }
-        )
+        data = {
+            "func": func,
+            "schedule": schedule,
+            "crontab": crontab,
+            "uuid": uuid,
+            "args": args,
+            "kwargs": kwargs,
+        }
+        if self.registration_thread:
+            self.task_queue.put(**data)
+        else:
+            # on not running a thread this is a blocking operation!
+            self.interface.register_task(**data)
 
     def _process_queue(self):
         """
