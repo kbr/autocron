@@ -78,7 +78,6 @@ class Worker:
         `run()`. As a signal handler terminate must accept optional
         positional arguments.
         """
-        print("got terminate signal")
         self.active = False
 
     def run(self):

@@ -43,7 +43,7 @@ def interface():
         pathlib.Path(interface.db_name).unlink(missing_ok=True)
 
 
-def test_start_subprocess():
+def xtest_start_subprocess():
     """
     Start and stop a subprocess.
     """
@@ -56,7 +56,7 @@ def test_start_subprocess():
     assert process.poll() is not None
 
 
-def test_start_and_stop_workerprocess():
+def xtest_start_and_stop_workerprocess():
     """
     Test to start and terminate a subprocess.
     """

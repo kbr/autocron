@@ -18,28 +18,11 @@ import pathlib
 import signal
 import subprocess
 import sys
-import threading
-import time
 
 from .sqlite_interface import SQLiteInterface
 
 
-WORKER_MODULE_NAME = "worker.py"
-WORKER_START_DELAY = 0.02
-
-
-def start_subprocess(database_file):
-    """
-    Starts the worker process in a detached subprocess. The
-    `database_file` is a string with an absolute or relative path to the
-    database in use.
-    """
-    worker_file = pathlib.Path(__file__).parent / WORKER_MODULE_NAME
-    cmd = [sys.executable, worker_file]
-    if database_file:
-        cmd.append(database_file)
-    cwd = pathlib.Path.cwd()
-    return subprocess.Popen(cmd, cwd=cwd)
+MONITOR_MODULE_NAME = "monitor.py"
 
 
 class Engine:
@@ -54,39 +37,9 @@ class Engine:
         # argument is not provided for initialization.
         self.interface = interface if interface else SQLiteInterface()
         self.exit_event = None
-        self.monitor_thread = None
+        self.monitor_process = None
         self.orig_signal_handlers = {}
-        self.processes = []
-
-    def worker_monitor(self):
-        """
-        Starts the worker processes and monitors that the workers are up
-        and running. Restart workers if necessary. This function must
-        run in a separate thread. The 'exit_event' is a
-        threading.Event() instance and the `database_file` is a string
-        with an absolute or relative path to the database in use. If the
-        monitor receives an exit_event the function will return,
-        terminating its own thread.
-        """
-        database_file = self.interface.db_name
-        timeout = self.interface.monitor_idle_time
-
-        for _ in range(self.interface.max_workers):
-            self.processes.append(start_subprocess(database_file))
-            time.sleep(WORKER_START_DELAY)
-
-        while True:
-            for process in self.processes:
-                if process.poll() is not None:
-                    self.interface.decrement_running_workers(process.pid)
-                    self.processes.remove(process)
-                    self.processes.append(start_subprocess(database_file))
-                    # in case more workers need a restart:
-                    time.sleep(WORKER_START_DELAY)
-            if self.exit_event.wait(timeout=timeout):
-                break
-
-    #         sys.exit()  # escape from the thread
+        self.set_signal_handlers()
 
     def set_signal_handlers(self):
         """
@@ -97,8 +50,6 @@ class Engine:
         signalnums = [
             signal.SIGINT,
             signal.SIGTERM,
-            signal.SIGABRT,
-            signal.SIGHUP,  # availablity: Unix
         ]
         for signalnum in signalnums:
             self.orig_signal_handlers[signalnum] = signal.getsignal(signalnum)
@@ -151,7 +102,7 @@ class Engine:
 
         # check whether the process monitors the workers,
         # but dont't start the monitor twice:
-        if self.interface.acquire_monitor_lock() and not self.monitor_thread:
+        if self.interface.acquire_monitor_lock() and not self.monitor_process:
             # adapt number of workers if given
             if workers is not None:
                 # override the already loaded value
@@ -161,10 +112,16 @@ class Engine:
                 settings.max_workers = workers
                 self.interface.update_settings(settings)
 
-            self.set_signal_handlers()
-            self.exit_event = threading.Event()
-            self.monitor_thread = threading.Thread(target=self.worker_monitor)
-            self.monitor_thread.start()
+            # start the monitor process:
+            monitor_file = pathlib.Path(__file__).parent / MONITOR_MODULE_NAME
+            cmd = [
+                sys.executable,
+                monitor_file,
+                f"--dbfile={database_file}",
+                f"--mainpid={pid}",
+            ]
+            cwd = pathlib.Path.cwd()
+            self.monitor_process = subprocess.Popen(cmd, cwd=cwd)
             result = True
 
         # start the registrator thread to populate the database:
@@ -177,21 +134,8 @@ class Engine:
         called when the application itself terminates. It is not
         necessary to call this method directly.
         """
-        if self.monitor_thread:
-            # check for self.exit_event for a test-scenario.
-            # in production if self.monitor_thread is not None
-            # self.exit_event is also not None
-            if self.exit_event:
-                # terminate the monitor thread
-                self.exit_event.set()
-            self.monitor_thread = None
-
-        # terminate the workers (if any) here in the main process:
-        # don't do this in the monitor thread, because the monitor thread
-        # may be unable to send the terminate signal to all workers before
-        # the main process terminates.
-        for process in self.processes:
-            process.terminate()
+        if self.monitor_process:
+            self.monitor_process.terminate()
 
         # stop registration and clean up the database
         self.interface.registrator.stop()

@@ -49,12 +49,11 @@ class Monitor:
         worker_file = pathlib.Path(__file__).parent / WORKER_MODULE_NAME
         cmd = [sys.executable, worker_file, self.database_file]
         cwd = pathlib.Path.cwd()
-        return subprocess.Popen(cmd, cwd=cwd)
+        self.sub_processes.append(subprocess.Popen(cmd, cwd=cwd))
 
     def start_workers(self):
         for _ in range(self.interface.max_workers):
-            process = self.start_subprocess()
-            self.sub_processes.append(process)
+            self.start_subprocess()
             time.sleep(WORKER_START_DELAY)
 
     def stop_workers(self):
@@ -65,8 +64,8 @@ class Monitor:
         for process in self.sub_processes:
             if process.poll() is not None:
                 self.interface.decrement_running_workers(process.pid)
-                self.processes.remove(process)
-                self.processes.append(self.start_subprocess(self.database_file))
+                self.sub_processes.remove(process)
+                self.start_subprocess()
                 # in case more workers need a restart:
                 time.sleep(WORKER_START_DELAY)
 
