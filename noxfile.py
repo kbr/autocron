@@ -67,3 +67,18 @@ def sphinx(session):
     )
     session.install("-r", "docs/requirements.txt")
     session.run("sphinx-build", "docs", "docs_build")
+
+
+@nox.session
+def sphinx_rtd(session):
+    session.install("-e", ".")
+    session.install("pip-tools==7.3.0")
+    session.run(
+        "pip-compile",
+        "--strip-extras",
+        "-q",
+        "--output-file=docs/requirements.txt",
+        "docs/requirements.in"
+    )
+    session.install("-r", "docs/requirements.txt")
+    session.run("sphinx-build", "docs", "docs_build")
