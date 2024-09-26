@@ -2,6 +2,14 @@ Version History
 ===============
 
 
+1.2.0 dev
+---------
+
+- the worker-monitor now runs as a process instead as a thread for better stability.
+- monitor makes additional checks for parent-process health to allow for a graceful shutdown of the workers if the main-application terminates unexpectedly (even in case of kill 9).
+- new settings flag ``blocking-mode`` (useful for development and compatibility with the django reloader).
+
+
 1.1.2 - 2024-09-19
 ------------------
 
@@ -44,7 +52,7 @@ Version History
 
 - refactoring the Result-class
 - add worker argument to start()
-- fix: don't register crontasks twice
+- fix: don't register cron-tasks twice
 
 
 0.9.4 - 2024-04-03

@@ -9,8 +9,11 @@ Admin Interface
 
     $ autocron
     usage: autocron command line tool [-h] [-i]
-    [--set-max-workers MAX_WORKERS] [--set-autocron-lock AUTOCRON_LOCK]
-    [--set-monitor-lock MONITOR_LOCK] [--set-worker-idle-time WORKER_IDLE_TIME]
+    [--set-max-workers MAX_WORKERS]
+    [--set-autocron-lock AUTOCRON_LOCK]
+    [--set-monitor-lock MONITOR_LOCK]
+    [--set-blocking-mode BLOCKING_MODE]
+    [--set-worker-idle-time WORKER_IDLE_TIME]
     [--set-monitor-idle-time MONITOR_IDLE_TIME]
     [--set-result-ttl RESULT_TTL]
     [--set-defaults] [--delete-database]
@@ -44,6 +47,9 @@ Admin Interface
 ``--set-monitor-lock:``
     set monitor lock flag. This is an internal flag indicating that a monitor process is active. When autocron starts with multiple processes of the web-application in parallel, the first process will start the monitor and the worker processes. Setting the flag prevents other processes to do the same and start additonal workers on their own. On shutdown, this flag gets released. However the admin tool allows to set the flag if something does not work as it should. Arguments are ``on, off, true, false``. During normal operation you should never have the need to deal with this setting.
 
+``--set-blocking-mode:``
+    set the blocking mode flag. Task registering is a blocking operation because of database access. If this flag is ``False`` task registration is handled by a separate thread in a non-blocking way. If this is not desired, i.e. by django in debug mode with an active reloader, setting this flag to ``True`` will suppress the start of a registration thread. Default setting is ``False``.
+
 ``--set-worker-idle-time:``
     set the idle time (integer in seconds) for the worker processes. If no tasks on due the worker(s) will sleep for the given time before checking again for new tasks. Defaults to 0 seconds, what means that the value is auto-calculated. This is a setting for fine-tuning and normalwise there is no need to change this.
 
@@ -60,7 +66,7 @@ If the worker-idle-time is set to zero (0) (which is the default), the idle-time
 
 Adding more workers to handle tasks is useful if tasks are permanently registered in a faster pace than the current number of workers can handle them. There is no upper limit for the number of workers (beside the system resources), but normalwise it makes no sense to start more workers than the number of available cpu-cores.
 
-**autocron** can get deactivated with the ``--set-autocron-lock`` setting. This can be useful for **debugging**. The default value is ``False``. Set the value to ``True`` or ``on`` to deactivate autocron (the arguments are case insensitive). Even when ``autocron.start()`` is called in the code, autocron will check the flag and will not start. The ``delay`` decorator will behave the same, returning a ``Result`` instance but the task itself will get executed in ``sync``, i.e. a blocking task will block.
+**autocron** can get deactivated with the ``--set-autocron-lock`` setting. This can be useful for **debugging**. The default value is ``False``. Set the value to ``True`` or ``on`` to deactivate autocron (the arguments are case insensitive). Even when ``autocron.start()`` is called in the code, autocron will check the flag and will not start. The ``delay`` decorator will behave the same, returning a ``Result`` instance but the task itself will get executed in ``sync``, i.e. a blocking task will block. Same if the ``--blocking-mode`` flag is set: task registration will be in ``sync`` with the application. This can be useful during development of django-applications.
 
 
 Database Storage

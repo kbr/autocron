@@ -17,3 +17,7 @@ h3 {
     padding-top: 1rem;
     font-size: 1.2em;
 }
+
+#quickstart blockquote p {
+    font-size: 0.86em;
+}

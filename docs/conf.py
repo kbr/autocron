@@ -43,3 +43,4 @@ pygments_style = "default"
 html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['autocron.css']
+html_logo = '_static/cheers-to-autocron-200x200.jpg'

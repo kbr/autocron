@@ -95,6 +95,8 @@ To activate autocron in a django-project, the proper way to do this is in the ``
 
 Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not.
 
+    **Note:** the django-reloader is known to not working well with multi-threading applications. Either deactivate autocron by setting the ``--set-autocron-lock`` flag during development. Or use the ``--set-blocking-mode`` flag to run autocron in blocking mode (no threads).
+
 
 flask
 .....

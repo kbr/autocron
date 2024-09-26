@@ -28,8 +28,9 @@ MONITOR_MODULE_NAME = "monitor.py"
 class Engine:
     """
     The Engine is the entry-point for autocron. Starting the engine will
-    start the monitor thread. The monitor-thread in turn starts and
-    supervise the workers. (The interface argument is used for testing.)
+    start the monitor process. The monitor-process in turn starts and
+    supervises the workers. The monitor-process also checks whether the web-application itself is running. In case of an unexpected termination (or even a ``kill 9``), all worker processes will shut down gracefully - no orphaned processes or zombies left.
+    (The interface argument is used for testing.)
     """
 
     def __init__(self, interface=None):
@@ -64,7 +65,7 @@ class Engine:
 
     def start(self, database_file, workers=None):
         """
-        Starts the autocron worker in case autocron is active and no
+        Starts the autocron workers in case autocron is active and no
         other application process has already started the workers. The
         ``database_file`` argument is a string with the name of the
         database to use (like "the_application.db") or a Path instance.
