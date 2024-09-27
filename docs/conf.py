@@ -5,6 +5,7 @@ For a full list of configuration settings see the documentation:
 http://www.sphinx-doc.org/en/master/config
 """
 
+import os
 import re
 from datetime import date
 from pathlib import Path
@@ -44,3 +45,10 @@ html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['autocron.css']
 html_logo = '_static/cheers-to-autocron-200x200.jpg'
+
+
+# let the template engine (Jinja2) know if the code runs on readthedocs:
+if os.environ.get("READTHEDOCS", "") == "True":
+    if "html_context" not in globals():
+        html_context = {}
+    html_context["READTHEDOCS"] = True
