@@ -81,4 +81,4 @@ Beside flask **autocron** can work with other web-frameworks like **django** or 
 
 ---
 
-    The **autocron-image** at the logo position is an author created DiffusionBee variant of people on Mars, watching the sunset, the worker planets and having a drink (letting autocron do all the tasks :)
+    The **autocron-logo** is a DiffusionBee variant of people on Mars, watching the sunset, the worker planets and having a drink (letting autocron do all the tasks :)

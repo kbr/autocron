@@ -7,7 +7,7 @@ For the application API autocron provides the decorators ``cron`` and ``delay`` 
 
 Functions decorated with ``delay`` will get executes later in a separate process. Functions decorated with ``cron`` will get executed periodically.
 
-To start the autocron background workers, the function ``start()`` must get called somewere in the code. The function ``stop()`` will stop the workers. It is not necessary to call ``stop()`` because autocron stops the workers on shutdown of the main application.
+To start the autocron background workers, the function ``start()`` must get called somewere in the code. The function ``stop()`` will stop the workers. It is not necessary to call ``stop()`` because autocron stops the workers on shutdown of the main application (even on a ``kill 9``).
 
 
 
