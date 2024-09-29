@@ -258,6 +258,8 @@ class Task(Model):
         crontab="",
         schedule=None,
         status=TASK_STATUS_WAITING,
+        function_name="",
+        function_module=""
     ):
         super().__init__(connection=connection)
         self.func = func
@@ -267,8 +269,8 @@ class Task(Model):
         self.crontab = crontab
         self.schedule = schedule
         self.status = status
-        self.function_module = None
-        self.function_name = None
+        self.function_module = function_module
+        self.function_name = function_name
         self.function_arguments = None
 
     def __str__(self):
@@ -287,9 +289,6 @@ class Task(Model):
         if self.func:
             self.function_module = self.func.__module__
             self.function_name = self.func.__name__
-        else:
-            self.function_module = ""
-            self.function_name = ""
         self.function_arguments = pickle.dumps((self.args, self.kwargs))
         super().store()
 
@@ -635,7 +634,7 @@ class TaskRegistrator:
             "kwargs": kwargs,
         }
         if self.registration_thread:
-            self.task_queue.put(**data)
+            self.task_queue.put(data)
         else:
             # on not running a thread this is a blocking operation!
             self.interface.register_task(**data)
