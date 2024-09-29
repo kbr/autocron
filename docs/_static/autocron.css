@@ -18,6 +18,10 @@ h3 {
     font-size: 1.2em;
 }
 
+img.sidebar-logo {
+    border-radius: 6px;
+}
+
 #quickstart blockquote p {
     font-size: 0.86em;
 }
