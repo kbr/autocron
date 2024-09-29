@@ -51,11 +51,14 @@ def test_cron_inactive(interface):
     not register an entry in the database. As the registrator thread is
     not running, the registration end in the queue and nothing else
     happens.
+    (This has changed by allowing to register a thread even if no
+    registration thread is running. This was a change for django in
+    debug mode with the reloader enabled.)
     """
     wrapper = decorators.cron()
     result = wrapper(tst_cron)
     assert result is tst_cron
-    assert interface.count_tasks() == 0
+    assert interface.count_tasks() == 1
 
 
 def test_cron_active(interface):
