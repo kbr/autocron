@@ -23,9 +23,11 @@ import queue
 import sqlite3
 import threading
 import time
+import uuid
 
 
 DEFAULT_STORAGE = ".autocron"
+TEMPORARY_PREFIX = ".temp-"
 REGISTER_BACKGROUND_TASK_TIMEOUT = 2.0
 
 SQLITE_OPERATIONAL_ERROR_RETRIES = 100
@@ -259,7 +261,7 @@ class Task(Model):
         schedule=None,
         status=TASK_STATUS_WAITING,
         function_name="",
-        function_module=""
+        function_module="",
     ):
         super().__init__(connection=connection)
         self.func = func
@@ -767,6 +769,7 @@ class SQLiteInterface:
         self.blocking_mode = None
         # the registrator for non blocking registration:
         self.registrator = TaskRegistrator(self)
+        self.init_database(f"{TEMPORARY_PREFIX}{str(uuid.uuid4())}.db")
 
     @property
     def db_name(self):
@@ -811,33 +814,50 @@ class SQLiteInterface:
         """
         self._result_ttl = datetime.timedelta(seconds=value)
 
+    @property
+    def has_temporary_database(self):
+        if self.db_name is not None:
+            if self.db_name.name.startswith(TEMPORARY_PREFIX):
+                return True
+        return False
+
     @db_access
     def init_database(self, db_name):
         """
         Set the database name and set up initial data.
         """
-        if not self.db_name:
-            self.db_name = db_name
-            with Connection(self.db_name, exclusive=True) as conn:
-                Task.create_table(conn)
-                Result.create_table(conn)
-                Settings.create_table(conn)
+        if self.has_temporary_database:
+            tasks = self.get_tasks()
+            self._delete_database()
+        else:
+            tasks = []
+        self.db_name = db_name
+        with Connection(self.db_name, exclusive=True) as conn:
+            Task.create_table(conn)
+            Result.create_table(conn)
+            Settings.create_table(conn)
 
-                # try to read the settings. If this fails create the first
-                # (and only) settings dataset with the default values:
-                settings = Settings.read(conn)
-                if settings is None:
-                    settings = Settings(conn)  # this set the defaults
-                    settings.store()  # store defaults in the database
+            # try to read the settings. If this fails create the first
+            # (and only) settings dataset with the default values:
+            settings = Settings.read(conn)
+            if settings is None:
+                settings = Settings(conn)  # this set the defaults
+                settings.store()  # store defaults in the database
 
-                # set attributes from settings that don't change during runtime:
-                self.autocron_lock = settings.autocron_lock
-                self.monitor_lock = settings.monitor_lock
-                self.monitor_idle_time = settings.monitor_idle_time
-                self.max_workers = settings.max_workers
-                self.worker_idle_time = settings.worker_idle_time
-                self.result_ttl = settings.result_ttl
-                self.blocking_mode = settings.blocking_mode
+            # set attributes from settings that don't change during runtime:
+            self.autocron_lock = settings.autocron_lock
+            self.monitor_lock = settings.monitor_lock
+            self.monitor_idle_time = settings.monitor_idle_time
+            self.max_workers = settings.max_workers
+            self.worker_idle_time = settings.worker_idle_time
+            self.result_ttl = settings.result_ttl
+            self.blocking_mode = settings.blocking_mode
+
+            # copy the tasks if any:
+            for task in tasks:
+                # set connection from the closed one to the new one:
+                task.connection = conn
+                task.store()
 
     @db_access
     def register_task(
@@ -1042,10 +1062,9 @@ class SQLiteInterface:
     def tear_down_database(self):
         """
         Reset all settings here so that the workers don't have to access
-        the database again on shutdown.
+        the database again on shutdown. Gets called from the engine on
+        shut-down.
         """
-        # gets called from the engine in case the interface
-        # is the worker_master
         with Connection(self.db_name, exclusive=True) as conn:
             settings = Settings.read(conn)
             settings.monitor_lock = False
@@ -1060,3 +1079,19 @@ class SQLiteInterface:
                 prev_status=TASK_STATUS_PROCESSING,
                 new_status=TASK_STATUS_WAITING,
             )
+
+    @db_access
+    def _delete_database(self):
+        """
+        Internal command to delete the temporary databases needed for start-up.
+        """
+        if self.db_name is not None:
+            db_path = pathlib.Path(self.db_name)
+            db_path.unlink(missing_ok=True)
+
+    def __del__(self):
+        # last resort instead of a signal handler
+        # not guaranteed to get called but useful in tests
+        # circumventing the singleton pattern
+        if self.has_temporary_database:
+            self._delete_database()

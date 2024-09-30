@@ -38,9 +38,11 @@ def interface():
     # set class attribute to None to not return a singleton
     sqlite_interface.SQLiteInterface._instance = None
     interface = sqlite_interface.SQLiteInterface()
+    tmp_db_name = interface.db_name
     yield interface
-    if interface.db_name:
-        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+    for db_name in (interface.db_name, tmp_db_name):
+        if db_name is not None:
+            pathlib.Path(interface.db_name).unlink(missing_ok=True)
 
 
 def xtest_start_subprocess():

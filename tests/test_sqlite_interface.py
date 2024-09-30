@@ -14,6 +14,7 @@ from autocron.sqlite_interface import (
     SETTINGS_DEFAULT_WORKERS,
     TASK_STATUS_WAITING,
     TASK_STATUS_PROCESSING,
+    TEMPORARY_PREFIX,
     Connection,
     Settings,
     Result,
@@ -22,6 +23,7 @@ from autocron.sqlite_interface import (
 
 
 TEST_DB_NAME = "test.db"
+TEMPORARY_TEST_DB_NAME = TEMPORARY_PREFIX + TEST_DB_NAME
 
 
 def tst_function(*args, **kwargs):
@@ -39,14 +41,16 @@ def tst_add_function(a, b):
 @pytest.fixture
 def raw_interface():
     """
-    Returns a new uninitialised database instance.
+    Returns a new database instance with a temporary db-file.
     """
     # set class attribute to None to not return a singleton
     sqlite_interface.SQLiteInterface._instance = None
     interface = sqlite_interface.SQLiteInterface()
+    tmp_db_name = interface.db_name
     yield interface
-    if interface.db_name is not None:
-        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+    for db_name in (interface.db_name, tmp_db_name):
+        if db_name is not None:
+            pathlib.Path(db_name).unlink(missing_ok=True)
 
 
 @pytest.fixture
@@ -57,10 +61,12 @@ def interface():
     # set class attribute to None to not return a singleton
     sqlite_interface.SQLiteInterface._instance = None
     interface = sqlite_interface.SQLiteInterface()
+    tmp_db_name = interface.db_name
     interface.init_database(db_name=TEST_DB_NAME)
     yield interface
-    if interface.db_name is not None:
-        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+    for db_name in (interface.db_name, tmp_db_name):
+        if db_name is not None:
+            pathlib.Path(db_name).unlink(missing_ok=True)
 
 
 @pytest.mark.parametrize(
@@ -441,3 +447,50 @@ def test_is_worker_pid(pids, pid, expected_result, interface):
     result = interface.is_worker_pid(pid)
     assert result == expected_result
 
+
+def test_delete_database(interface):
+    """
+    Check that the interface can delete its own database.
+    """
+    db_path = pathlib.Path(interface.db_name)
+    assert db_path.exists() is True
+    interface._delete_database()
+    assert db_path.exists() is False
+
+
+def test_check_temporary_database_property(raw_interface):
+    assert raw_interface.has_temporary_database is True
+    raw_interface.db_name = TEST_DB_NAME
+    assert raw_interface.has_temporary_database is False
+    raw_interface.db_name = TEMPORARY_TEST_DB_NAME
+    assert raw_interface.has_temporary_database is True
+
+
+def test_temporary_database(raw_interface):
+    """
+    Test story: create a temporary database. add a task and set a
+    not-temporary name for the database. The temporary database should
+    be gone and the task should be transferred to the new database.
+    """
+    db = raw_interface  # for less typing
+    tmp_name = db.db_name
+    assert tmp_name.name.startswith(TEMPORARY_PREFIX)
+    assert tmp_name.exists() is True
+
+    # register a cron task in the temporary database
+    db.register_task(tst_cron_function, crontab="*")
+    with Connection(db.db_name) as conn:
+        assert Task.count_rows(conn) == 1
+
+    # init database again with a non temporary name
+    # the former database should have been deleted
+    # and the previous registered cron task should now be
+    # in the new database
+    db.init_database(db_name=TEST_DB_NAME)
+    assert tmp_name.exists() is False
+    with Connection(db.db_name) as conn:
+        assert Task.count_rows(conn) == 1
+        task = Task.get_by_function_name(tst_cron_function, conn)
+        assert task is not None
+        assert task.function_module == tst_cron_function.__module__
+        assert task.function_name == tst_cron_function.__name__

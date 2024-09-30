@@ -34,6 +34,7 @@ def interface():
     # set class attribute to None to not return a singleton
     sqlite_interface.SQLiteInterface._instance = None
     interface = sqlite_interface.SQLiteInterface()
+    tmp_db_name = interface.db_name
     interface.init_database(db_name=TEST_DB_NAME)
     # inject the interface to the decorator module
     # so the decorators access the same interface
@@ -41,8 +42,9 @@ def interface():
     decorators.interface = interface
     yield interface
     decorators.interface = decorators_interface
-    if interface.db_name is not None:
-        pathlib.Path(interface.db_name).unlink(missing_ok=True)
+    for db_name in (interface.db_name, tmp_db_name):
+        if db_name is not None:
+            pathlib.Path(interface.db_name).unlink(missing_ok=True)
 
 
 def test_cron_inactive(interface):
