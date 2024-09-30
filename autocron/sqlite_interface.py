@@ -20,6 +20,7 @@ import functools
 import pathlib
 import pickle
 import queue
+import signal
 import sqlite3
 import threading
 import time
@@ -767,6 +768,8 @@ class SQLiteInterface:
         self.max_workers = None
         self.worker_idle_time = None
         self.blocking_mode = None
+        self.orig_signal_handlers = {}
+        self.set_signal_handlers()
         # the registrator for non blocking registration:
         self.registrator = TaskRegistrator(self)
         self.init_database(f"{TEMPORARY_PREFIX}{str(uuid.uuid4())}.db")
@@ -1090,8 +1093,35 @@ class SQLiteInterface:
             db_path.unlink(missing_ok=True)
 
     def __del__(self):
-        # last resort instead of a signal handler
+        # last resort additional to the signal handler
         # not guaranteed to get called but useful in tests
         # circumventing the singleton pattern
         if self.has_temporary_database:
             self._delete_database()
+
+    def _shut_down(self, signalnum, stackframe=None):
+        if self.has_temporary_database:
+            self._delete_database()
+        self.reset_signal_handlers()
+        signal.raise_signal(signalnum)  # requires Python >= 3.8
+
+    def set_signal_handlers(self):
+        """
+        Set self._terminate() as handler for a couple of
+        termination-signals and store the orinal handlers for this
+        signals.
+        """
+        signalnums = [
+            signal.SIGINT,
+            signal.SIGTERM,
+        ]
+        for signalnum in signalnums:
+            self.orig_signal_handlers[signalnum] = signal.getsignal(signalnum)
+            signal.signal(signalnum, self._shut_down)
+
+    def reset_signal_handlers(self):
+        """
+        Reset the original signal handlers.
+        """
+        for signalnum, signalhandler in self.orig_signal_handlers.items():
+            signal.signal(signalnum, signalhandler)
