@@ -3,7 +3,7 @@
 Integration
 ===========
 
-**autocron** is designed for easy usage and easy integration to web-applications. The public interface are the two decoratores ``cron`` and ``delay`` and a single function ``start()``.
+**autocron** is designed for easy integration to web-applications. The public interface are the two decorators ``cron`` and ``delay`` and the ``start()`` funtion.
 
 Just apply the decorators and call ``start()`` and you are ready to go.
 
@@ -33,7 +33,7 @@ Decorators
 
 **Activate and deactivate:** autocron provides a global flag whether to start or not. This can be set by the autocron-admin tool. After installing autocron, the admin-tool is available from the command line: ::
 
-    $ autocron <database-filename> --set-autocron-lock on
+    $ autocron <database-filename> --set-autocron-lock=on
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
@@ -95,7 +95,7 @@ To activate autocron in a django-project, the proper way to do this is in the ``
 
 Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not.
 
-    **Note:** the django-reloader is known to not working well with multi-threading applications. Either deactivate autocron by setting the ``--set-autocron-lock`` flag during development. Or use the ``--set-blocking-mode`` flag to run autocron in blocking mode (no threads).
+    **Note:** the django-reloader is known for not working well with multi-threading applications. Either deactivate autocron by setting ``--set-autocron-lock=on`` flag during development. Or set ``--set-blocking-mode=on`` to use autocron in blocking mode.
 
 
 flask
@@ -276,7 +276,7 @@ autocron gets imported and then started from the ``main()`` function. The call o
 starlette
 .........
 
-starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks after finishing the current request first. With autocron,  background-task can get decoupled from the process handling the request and it is easy to include cron-jobs. Again the decorated function is defined in a separate module: ::
+starlette already comes with a buildin ``BackgroundTask`` class that can handle additional tasks after finishing the current request first. With autocron,  background-task can get decoupled from the process handling the request and it is easy to include cron-jobs. Again the decorated functions are defined in a separate module: ::
 
     # utils.py
     import time
@@ -293,7 +293,7 @@ starlette already comes with a buildin ``BackgroundTask`` class that can handle 
         print("action from the cron job")
 
 
-and imported to the main application: ::
+and imported by the main application: ::
 
     # application.py
     from starlette.applications import Starlette
@@ -321,6 +321,58 @@ and imported to the main application: ::
 starlette allows to invoke a ``startup()``-function, which is the right place to call ``autocron.start()``.
 
 The above example can get started from the command-line by ``$ uvicorn application:app``. The cronjob function will get executed every minute.
+
+
+FastAPI
+.......
+
+FastAPI is based on starlette and has the same backgroundtask-mechanism. But integration of autocron works a bit different as FastAPI uses a contextmanager to call functions at startup and shutdown.
+
+The decorated functions are defined in a separate module: ::
+
+    # utils.py
+    import time
+    import autocron
+
+    @autocron.delay
+    def do_this_later():
+        time.sleep(2)
+        print("\ndo this later")
+
+    @autocron.cron("* * * * *")
+    def cronjob():
+        """do something from time to time"""
+        print("action from the cron job")
+
+and imported by the main application: ::
+
+    import autocron
+
+    from contextlib import asynccontextmanager
+    from fastapi import FastAPI
+    from utils import do_this_later
+
+    @asynccontextmanager
+    async def lifespan(app):
+        autocron.start("the_fastapi_app.db", workers=4)
+        try:
+            yield
+        finally:
+            autocron.stop()  # not really needed
+                             # but explicit is better than implicit
+
+    app = FastAPI(lifespan=lifespan)
+
+    @app.get("/")
+    def read_root():
+        do_this_later()
+        return {"Hello": "World"}
+
+
+The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really neccessary as autocron detects when the parent-application terminates. But explicit is better than implicit and calling ``stop()`` does not hurt so it is good style to do this with FastAPI applications.
+
+To start the FastAPI application call ``fastapi dev main.py`` or ``fastapi run main.py`` at the command line.
+
 
 
 other frameworks
