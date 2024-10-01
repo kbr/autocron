@@ -1,7 +1,7 @@
-.. _application-iterface:
+.. _autocron-api:
 
-Application Interface
-=====================
+autocron api
+============
 
 For the application API autocron provides the decorators ``cron`` and ``delay`` and the functions ``start()``, ``stop()`` and ``get_results()``. After importing autocron the decorators and function are accessible like i.e.  ``autocron.start()``.
 

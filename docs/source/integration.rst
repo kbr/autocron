@@ -37,7 +37,7 @@ Decorators
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
-More details about the decorators and ``Result`` are in the chapter :ref:`Application Interface<application-iterface>`.
+More details about the decorators and ``Result`` are in the chapter :ref:`autocron api<autocron-api>`.
 
 
 Application-Integration
@@ -48,7 +48,7 @@ To make the decorators work, **autocron** has to start. This happens in the appl
     import autocron
     autocron.start("project.db")
 
-with "project.db" as the name of the database-file. If the file does not exist it will be created. More details about the ``start()`` function are in the chapter :ref:`Application Interface<application-iterface>`.
+with "project.db" as the name of the database-file. If the file does not exist it will be created. More details about the ``start()`` function are in the chapter :ref:`autocron api<autocron-api>`.
 
 Where to integrate the ``start()`` function depends on the used framework:
 
