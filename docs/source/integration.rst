@@ -7,6 +7,8 @@ Integration
 
 Just apply the decorators and call ``start()`` and you are ready to go.
 
+Also autocron provides the settings ``autocron-lock`` and ``blocking-mode`` that can be useful for development and debugging (see below).
+
 
 Decorators
 ----------
@@ -31,13 +33,28 @@ Decorators
 
 - A ``Result`` instance provides attributes like ``is_waiting`` which is a ``boolean`` indicating whether a result is available. In this case the function result is accessible by ``Result.function_result``. In case the result should get ignored it is safe to ignore the returned ``Result`` instance. autocon deletes outdated results from time to time from the database.
 
+More details about the decorators and ``Result`` are in the chapter :ref:`autocron api<autocron-api>`.
+
+
+Settings
+--------
+
 **Activate and deactivate:** autocron provides a global flag whether to start or not. This can be set by the autocron-admin tool. After installing autocron, the admin-tool is available from the command line: ::
 
     $ autocron <database-filename> --set-autocron-lock=on
 
-If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
+If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again, set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
-More details about the decorators and ``Result`` are in the chapter :ref:`autocron api<autocron-api>`.
+**blocking and non-blocking:** autocron starts a thread in the application-process to register functions, so the call to a decorated function is non-blocking. Applications with threads can be hard to debug so threads are often avoided during development. Especially the django-reloader is known for not working well with multi-threaded applications. In blocking-mode autocron does not start additional threads. With: ::
+
+    $ autocron <database-filename> --set-blocking-mode=on
+
+blocking mode can get activated. Default setting is ``off``. Even in blocking-mode the registration runs rather fast, but may be an issue for async frameworks.
+
+Both settings are useful for development and debugging.
+
+For more about settings see :ref:`Admin interface<admin-iterface>`.
+
 
 
 Application-Integration

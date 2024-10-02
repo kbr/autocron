@@ -33,7 +33,7 @@ Quickstart
 
 **autocron** allows easy integration to web-applications. The library provides two decorators: **cron** for recurring tasks and **delay** to delegate long running tasks to background processes. The background workers are activated calling the **start** function.
 
-Here is an example how to use autocron with the widespread **flask** web-framework: ::
+Here is an example how to use autocron with the **flask** web-framework: ::
 
     # application.py
     import time
