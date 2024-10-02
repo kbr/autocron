@@ -6,9 +6,9 @@ Version History
 ---------
 
 - new settings-flag ``blocking-mode`` to suppress the registration thread in the main process. Useful for application development and debugging (adds compatibility with the django-reloader).
-- the worker-monitor now runs as a process instead as a thread for better stability.
+- the worker-monitor now runs as a process instead as a thread.
 - the worker-monitor checks for parent-process health to allow for a graceful shutdown of the workers if the main-application terminates unexpectedly (even in case of a kill 9).
-- fix: temporary storage added for situations where the cron-decorator executes before autocron.start() gets called and the database is unknown.
+- fix: temporary storage added for situations where the database is unknown because the cron-decorator executes before autocron.start() gets called.
 
 
 1.1.2 - 2024-09-19
