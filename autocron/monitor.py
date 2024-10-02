@@ -39,6 +39,7 @@ class Monitor:
 
     def terminate(self, *args):
         self.terminate_monitor = True
+        self.stop_workers()
 
     def start_subprocess(self):
         """
@@ -47,9 +48,16 @@ class Monitor:
         database in use.
         """
         worker_file = pathlib.Path(__file__).parent / WORKER_MODULE_NAME
-        cmd = [sys.executable, worker_file, self.database_file]
+        cmd = [
+            sys.executable,
+            worker_file,
+            f"--dbfile={self.database_file}",
+            f"--monitorpid={self.pid}",
+        ]
         cwd = pathlib.Path.cwd()
-        self.sub_processes.append(subprocess.Popen(cmd, cwd=cwd))
+        self.sub_processes.append(
+            subprocess.Popen(cmd, cwd=cwd, start_new_session=True)
+        )
 
     def start_workers(self):
         for _ in range(self.interface.max_workers):
@@ -57,8 +65,10 @@ class Monitor:
             time.sleep(WORKER_START_DELAY)
 
     def stop_workers(self):
-        for process in self.sub_processes:
+        processes = self.sub_processes.copy()
+        for process in processes:
             process.terminate()
+            self.sub_processes.remove(process)
 
     def monitor_workers(self):
         for process in self.sub_processes:

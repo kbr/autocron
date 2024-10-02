@@ -10,6 +10,7 @@ worker class for handling cron- and delayed-tasks.
 #
 # license: MIT
 
+import argparse
 import importlib
 import os
 import signal
@@ -37,20 +38,24 @@ class Worker:
     Gets supervised and monitored from the engine.
     """
 
-    def __init__(self, database_filename):
+    def __init__(self, args):
         self.active = True
         self.result = None
         self.error_message = None
+        self.monitor_pid = args.monitorpid
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
+
         # Get a SQLiteInterface instance 'as is' without the
         # initialization step to clean up tasks.
         # Providing the databasename will set the database
         # to an initialized-state.
         self.interface = sqlite_interface.SQLiteInterface()
-        self.interface.init_database(database_filename)
+        self.interface.init_database(args.dbfile)
+
         # prevent the interface to register functions from the worker-process:
         self.interface.accept_registrations = False
+
         self.worker_idle_time = self._get_worker_idle_time()
         if DJANGO_FRAMEWORK_IN_USE:
             django.setup()
@@ -170,14 +175,20 @@ class Worker:
             # not a cronjob: delete the task from the db
             self.interface.delete_task(task)
 
+def get_arguments():
+    """takes `--dbfile` and `--monitorpid` as required arguments"""
+    parser = argparse.ArgumentParser(prog="autocron.worker")
+    parser.add_argument("--dbfile")
+    parser.add_argument("--monitorpid", type=int)
+    return parser.parse_args()
+
+
 
 def start_worker():
     """subprocess entry-point"""
     # insert cwd of hosting application to pythonpath
     sys.path.insert(0, os.getcwd())
-    # engine provides the database name as first argument:
-    database_filename = sys.argv[1]
-    worker = Worker(database_filename)
+    worker = Worker(get_arguments())
     worker.run()
 
 

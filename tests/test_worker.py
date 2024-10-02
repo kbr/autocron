@@ -6,6 +6,7 @@ test_engine.py
 """
 
 import pathlib
+import types
 
 import pytest
 
@@ -13,7 +14,9 @@ from autocron import sqlite_interface
 from autocron import worker
 
 
+MONITOR_PID = 0  # dummy pid
 TEST_DB_NAME = "test.db"
+TEST_ARGS = types.SimpleNamespace(dbfile=TEST_DB_NAME, monitorpid=MONITOR_PID)
 
 
 def tst_add(a, b):
@@ -41,7 +44,7 @@ def test_init_worker(interface):
     is a singleton and set during the __init__ method.
     """
     assert interface.accept_registrations is True
-    worker_ = worker.Worker(TEST_DB_NAME)
+    worker_ = worker.Worker(TEST_ARGS)
     assert worker_.interface is interface
 
 
@@ -58,7 +61,7 @@ def test_handle_delayed_task(interface):
     assert interface.count_results() == 1
 
     # create a worker and handle the task:
-    worker_ = worker.Worker(TEST_DB_NAME)
+    worker_ = worker.Worker(TEST_ARGS)
     has_processed_a_task = worker_.handle_task()
     assert has_processed_a_task is True
 

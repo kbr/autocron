@@ -122,7 +122,13 @@ class Engine:
                 f"--mainpid={pid}",
             ]
             cwd = pathlib.Path.cwd()
-            self.monitor_process = subprocess.Popen(cmd, cwd=cwd)
+            self.monitor_process = subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
             result = True
 
         # start the registrator thread to populate the database:
