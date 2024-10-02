@@ -44,7 +44,7 @@ class Engine:
         self.orig_signal_handlers = {}
         self.set_signal_handlers()
         # handler for SIGCHLD
-#         signal.signal(signal.SIGCHLD, self._check_monitor_child)
+        signal.signal(signal.SIGCHLD, self._check_monitor_child)
 
     def set_signal_handlers(self):
         """
@@ -126,13 +126,7 @@ class Engine:
                 f"--mainpid={pid}",
             ]
             cwd = pathlib.Path.cwd()
-            self.monitor_process = subprocess.Popen(
-                cmd,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True
-            )
+            self.monitor_process = subprocess.Popen(cmd, cwd=cwd)
             result = True
 
         # start the registrator thread to populate the database:

@@ -40,6 +40,8 @@ class Monitor:
     def terminate(self, *args):
         self.terminate_monitor = True
         self.stop_workers()
+        # tear down in case the engine was killed:
+        self.interface.tear_down_database()
 
     def start_subprocess(self):
         """
@@ -55,9 +57,7 @@ class Monitor:
             f"--monitorpid={self.pid}",
         ]
         cwd = pathlib.Path.cwd()
-        self.sub_processes.append(
-            subprocess.Popen(cmd, cwd=cwd, start_new_session=True)
-        )
+        self.sub_processes.append(subprocess.Popen(cmd, cwd=cwd))
 
     def start_workers(self):
         for _ in range(self.interface.max_workers):
@@ -65,10 +65,8 @@ class Monitor:
             time.sleep(WORKER_START_DELAY)
 
     def stop_workers(self):
-        processes = self.sub_processes.copy()
-        for process in processes:
+        for process in self.sub_processes:
             process.terminate()
-            self.sub_processes.remove(process)
 
     def monitor_workers(self):
         for process in self.sub_processes:
@@ -86,7 +84,6 @@ class Monitor:
                 break
             self.monitor_workers()
             time.sleep(self.monitor_idle_time)
-        self.stop_workers()
 
     @property
     def master_missing(self):

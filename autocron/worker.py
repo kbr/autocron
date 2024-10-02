@@ -30,6 +30,7 @@ else:
 
 # base idle time (in seconds) for auto-calculation
 DEFAULT_WORKER_IDLE_TIME = 1
+NOOP_SIGNAL = 0
 
 
 class Worker:
@@ -60,6 +61,17 @@ class Worker:
         if DJANGO_FRAMEWORK_IN_USE:
             django.setup()
 
+    @property
+    def monitor_missing(self):
+        if self.monitor_pid is not None:
+            try:
+                # signal 0 does nothing but tries to access the process
+                os.kill(self.monitor_pid, NOOP_SIGNAL)
+            except OSError:
+                # master process not found
+                return True
+        return False
+
     def _get_worker_idle_time(self):
         """
         If worker_idle_time is in auto-mode (value in database settings
@@ -80,8 +92,7 @@ class Worker:
     def terminate(self, *args):  # pylint: disable=unused-argument
         """
         Signal handler to stop the process, terminates the loop in
-        `run()`. As a signal handler terminate must accept optional
-        positional arguments.
+        `run()`.
         """
         self.active = False
 
@@ -96,6 +107,7 @@ class Worker:
             if not self.handle_task():
                 # nothing to do, check for results to delete:
                 self.interface.delete_outdated_results()
+
                 # don't sleep too long in case of longer idle-times
                 # wake up at least every second to check for self.active
                 # to terminate as soon as possible:
@@ -105,6 +117,13 @@ class Worker:
                     if not self.active:
                         break
                     idle_time -= 1
+
+                # check for missing monitor without receiving a SIGTERM
+                # indication an unfriendly shutdown
+                if self.monitor_missing and self.active:
+                    # tear down database and exit worker-process
+                    self.interface.tear_down_database()
+                    self.active = False
 
     def handle_task(self):
         """
@@ -175,13 +194,13 @@ class Worker:
             # not a cronjob: delete the task from the db
             self.interface.delete_task(task)
 
+
 def get_arguments():
     """takes `--dbfile` and `--monitorpid` as required arguments"""
     parser = argparse.ArgumentParser(prog="autocron.worker")
     parser.add_argument("--dbfile")
     parser.add_argument("--monitorpid", type=int)
     return parser.parse_args()
-
 
 
 def start_worker():
