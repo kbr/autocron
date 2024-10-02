@@ -39,8 +39,12 @@ class Engine:
         self.interface = interface if interface else SQLiteInterface()
         self.exit_event = None
         self.monitor_process = None
+
+        # handlers for SIGINT and SIGTERM
         self.orig_signal_handlers = {}
         self.set_signal_handlers()
+        # handler for SIGCHLD
+#         signal.signal(signal.SIGCHLD, self._check_monitor_child)
 
     def set_signal_handlers(self):
         """
@@ -156,6 +160,15 @@ class Engine:
         # stop registration and clean up the database
         self.interface.registrator.stop()
         self.interface.tear_down_database()
+
+    def _check_monitor_child(self, signalnum, stackframe=None):
+        """
+        Check the monitor process in case of SIGCHLD to clear the
+        according kernel process slot and prevent the monitor to become
+        a zombie.
+        """
+        if self.monitor_process:
+            self.monitor_process.poll()
 
     def _terminate(self, signalnum, stackframe=None):
         """
