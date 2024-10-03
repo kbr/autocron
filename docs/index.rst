@@ -9,7 +9,7 @@ autocron documentation
 **autocron** is easy to install and to integrate to web-applications like `flask <https://flask.palletsprojects.com>`_ or `django <https://www.djangoproject.com/>`_. Because task-registration is non-blocking *autocron* can also be used with async frameworks like `tornado <https://www.tornadoweb.org/>`_ or `FastAPI <https://fastapi.tiangolo.com/>`_. See :ref:`Integration<integration>` for more details and other frameworks.
 
 
-    **The idea** behind *autocron* is to make the use and integration of asynchronous background tasks as easy as possible. It is the **fire and forget** background task handler for python web-frameworks. There is no adminstration overhead to manage consumer and worker processes or databases. As storage ``SQLite`` is used handling parallel accesses in a non-blocking way for the application. Because *autocron* has lightweight datastructures and queries ``SQLite`` is rather fast.
+    **The idea** behind *autocron* is to make the integration of asynchronous background tasks as easy as possible. There is no adminstration overhead to manage consumer and worker processes or databases. As storage ``SQLite`` is used, enabled to handle parallel connections in a non-blocking way for the application. As embedded database and because *autocron* has lightweight datastructures and queries ``SQLite`` is rather fast.
 
     **autocron** is designed for web-sites that don't need massive scaling – which are most web-sites. Vertical scaling will work. For horizontal scaling *autocron* is currently not designed.
 

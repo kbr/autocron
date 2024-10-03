@@ -45,15 +45,15 @@ Settings
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again, set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
-**blocking and non-blocking:** autocron starts a thread in the application-process to register functions, so the call to a decorated function is non-blocking. Applications with threads can be hard to debug so threads are often avoided during development. Especially the django-reloader is known for not working well with multi-threaded applications. In blocking-mode autocron does not start additional threads. With: ::
+**blocking and non-blocking:** autocron starts a thread in the application-process to register tasks, so registering is non-blocking. To not start this thread set: ::
 
     $ autocron <database-filename> --set-blocking-mode=on
 
-blocking mode can get activated. Default setting is ``off``. Even in blocking-mode the registration runs rather fast, but may be an issue for async frameworks.
+Default setting is ``off``. In blocking mode tasks are still executed in background processes, just the registration is a blocking step because of a database access in the main thread.
 
 Both settings are useful for development and debugging.
 
-For more about settings see :ref:`Admin interface<admin-iterface>`.
+More about settings: :ref:`Admin interface<admin-iterface>`.
 
 
 
@@ -65,7 +65,7 @@ To make the decorators work, **autocron** has to start. This happens in the appl
     import autocron
     autocron.start("project.db")
 
-with "project.db" as the name of the database-file. If the file does not exist it will be created. More details about the ``start()`` function are in the chapter :ref:`autocron api<autocron-api>`.
+with "project.db" as the name of the database-file. If the file does not exist it will get created. More details about the ``start()`` function are in the chapter :ref:`autocron api<autocron-api>`.
 
 Where to integrate the ``start()`` function depends on the used framework:
 
@@ -112,7 +112,7 @@ To activate autocron in a django-project, the proper way to do this is in the ``
 
 Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not.
 
-    **Note:** the django-reloader is known for not working well with multi-threading applications. Either deactivate autocron by setting ``--set-autocron-lock=on`` flag during development. Or set ``--set-blocking-mode=on`` to use autocron in blocking mode.
+    **Note:** the django-reloader is known for not working well with multi-threading applications. For compatibility set ``--set-blocking-mode=on`` to use autocron in blocking mode.
 
 
 flask
@@ -189,7 +189,7 @@ autocron gets imported and started before ``bottle.run()`` is called, because ru
 pyramid
 .......
 
-For development a pyramid application can get started from the command-line via ``$ python application.py``, like a bottle application. For the same reason the autocron decorated functions should be defined in separate modules: ::
+For development, a pyramid application can get started from the command-line via ``$ python application.py``, like a bottle application. For the same reason the autocron decorated functions should be defined in separate modules: ::
 
     # utils.py
     import time
@@ -376,7 +376,6 @@ and imported by the main application: ::
             yield
         finally:
             autocron.stop()  # not really needed
-                             # but explicit is better than implicit
 
     app = FastAPI(lifespan=lifespan)
 
@@ -386,7 +385,7 @@ and imported by the main application: ::
         return {"Hello": "World"}
 
 
-The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really neccessary as autocron detects when the parent-application terminates. But explicit is better than implicit and calling ``stop()`` does not hurt so it is good style to do this with FastAPI applications.
+The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really neccessary as autocron detects when the application terminates.
 
 To start the FastAPI application call ``fastapi dev main.py`` or ``fastapi run main.py`` at the command line.
 

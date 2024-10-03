@@ -5,12 +5,13 @@ Version History
 1.2.0 dev
 ---------
 
-- new settings-flag ``blocking-mode`` to suppress the registration thread in the main process. Useful for application development and debugging (adds compatibility with the django-reloader).
+- new settings-flag ``blocking-mode`` to activate/deactivate the registration thread in the main process. Useful for application development and debugging.
 - the monitor now runs as a process instead as a thread.
 - the monitor checks for parent-process health to allow for a graceful shutdown of the workers if the main-application terminates unexpectedly (even in case of a kill 9).
 - the engine clears the kernel process slot in case the monitor dies to prevent zombies.
 - the worker will shut down in case of a missing monitor, even if no SIGTERM was received.
-- fix: temporary storage added for situations where the database is unknown because the cron-decorator executes before autocron.start() gets called.
+- fix: cli tool can delete damaged database
+- fix: temporary storage added for situations on start-up where registrations happen before autocron.start() is called.
 
 
 1.1.2 - 2024-09-19
