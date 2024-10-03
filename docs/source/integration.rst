@@ -7,8 +7,6 @@ Integration
 
 Just apply the decorators and call ``start()`` and you are ready to go.
 
-Also autocron provides the settings ``autocron-lock`` and ``blocking-mode`` that can be useful for development and debugging (see below).
-
 
 Decorators
 ----------
@@ -33,7 +31,10 @@ Decorators
 
 - A ``Result`` instance provides attributes like ``is_waiting`` which is a ``boolean`` indicating whether a result is available. In this case the function result is accessible by ``Result.function_result``. In case the result should get ignored it is safe to ignore the returned ``Result`` instance. autocon deletes outdated results from time to time from the database.
 
-More details about the decorators and ``Result`` are in the chapter :ref:`autocron api<autocron-api>`.
+Details about the decorators and ``Result`` are in the chapter :ref:`autocron api<autocron-api>`.
+
+    **Note:** If a web-application starts with the main-module as a Python-Interpreter argument like ``$ python webapp.py`` then ``webapp.py`` has the internal name ``__main__``. Decorators should not get used in modules with the internal name ``__main__``, because this does not allow a proper lookup in the backend process.
+
 
 
 Settings
@@ -45,13 +46,13 @@ Settings
 
 If this flag is set, autocron will not start. No further changes in the code are needed. To activate autocron again, set the flag to ``off`` (``true`` and ``false`` are also possible arguments).
 
-**blocking and non-blocking:** autocron starts a thread in the application-process to register tasks, so registering is non-blocking. To not start this thread set: ::
+**blocking and non-blocking:** autocron starts a thread in the application-process to register tasks, so registering is non-blocking. To deactivate this, set: ::
 
     $ autocron <database-filename> --set-blocking-mode=on
 
-Default setting is ``off``. In blocking mode tasks are still executed in background processes, just the registration is a blocking step because of a database access in the main thread.
+Default setting is ``off``. In blocking mode tasks are still executed in the background process, just the registration is a blocking operation because of a direct database access in the main thread.
 
-Both settings are useful for development and debugging.
+Both settings can be useful for development and debugging.
 
 More about settings: :ref:`Admin interface<admin-iterface>`.
 
@@ -112,7 +113,7 @@ To activate autocron in a django-project, the proper way to do this is in the ``
 
 Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not.
 
-    **Note:** the django-reloader is known for not working well with multi-threading applications. For compatibility set ``--set-blocking-mode=on`` to use autocron in blocking mode.
+    **Note:** the django-reloader is known for not working well with multi-threading applications. *autocron* handles this but for development it could be cleaner to set ``--set-blocking-mode=on``. Also the django-reloader does not send a ``SIGTERM`` but replaces the process, so on a reload *autocron* will not shut down and restart, but keep running.
 
 
 flask
@@ -183,7 +184,7 @@ The entry-point of the bottle-application is in a file named "application.py" th
 
 autocron gets imported and started before ``bottle.run()`` is called, because run() will not return. The ``do_this_later()`` function is imported from "utils.py". Also the cronjob-function is imported and will get executed every minute.
 
-(bottle-applications can also get started in other ways, not causing the problem to resolve the name of the main-module – however it is a good idea to avoid a situation like this.)
+(bottle-applications can also get started in other ways, not causing the problem to resolve the name of the main-module - however it is a good idea to avoid a situation like this.)
 
 
 pyramid
@@ -387,7 +388,7 @@ and imported by the main application: ::
 
 The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really neccessary as autocron detects when the application terminates.
 
-To start the FastAPI application call ``fastapi dev main.py`` or ``fastapi run main.py`` at the command line.
+To start the FastAPI application call ``$ fastapi dev main.py`` or ``$ fastapi run main.py`` at the command line.
 
 
 
