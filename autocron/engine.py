@@ -150,6 +150,7 @@ class Engine:
         """
         if self.monitor_process:
             self.monitor_process.terminate()
+            self.monitor_process = None
 
         # stop registration and clean up the database
         self.interface.registrator.stop()
@@ -167,12 +168,12 @@ class Engine:
     def _terminate(self, signalnum, stackframe=None):
         """
         Terminate autocron by calling the engine.stop() method.
-        Afterward reraise the signal again for the original
-        signal-handler.
         """
         # a stackframe may be given to the signal-handler
         # which is not used here.
         # pylint: disable=unused-argument
         self.stop()
         self.reset_signal_handlers()
-        signal.raise_signal(signalnum)  # requires Python >= 3.8
+        # reraise to not hide the signal from the main application:
+        # (requires Python >= 3.8)
+        signal.raise_signal(signalnum)

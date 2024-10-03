@@ -39,9 +39,6 @@ class Monitor:
 
     def terminate(self, *args):
         self.terminate_monitor = True
-        self.stop_workers()
-        # tear down in case the engine was killed:
-        self.interface.tear_down_database()
 
     def start_subprocess(self):
         """
@@ -84,6 +81,9 @@ class Monitor:
                 break
             self.monitor_workers()
             time.sleep(self.monitor_idle_time)
+        # tear down in case the engine was killed:
+        self.interface.tear_down_database()
+        self.stop_workers()
 
     @property
     def master_missing(self):
