@@ -188,6 +188,7 @@ class Model:
         `rowid`. Otherwise `sql` and `data` must be given to make
         specific selection.
         """
+        instance = None
         if rowid is not None:
             # simple select by rowid
             sql = cls._get_sql_select()
@@ -195,9 +196,7 @@ class Model:
             data = {"rowid": rowid}
         cursor = connection.run(sql, data)
         cursor.row_factory = getattr(cls, "row_factory", None)
-        data = cursor.fetchone()
-        instance = None
-        if data:
+        if data := cursor.fetchone():
             instance = cls(connection)
             instance.__dict__.update(data)
         return instance
