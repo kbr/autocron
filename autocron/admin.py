@@ -31,9 +31,12 @@ PGM_DESCRIPTION = """
 class Admin:
     """Collection of methods for administration-tasks."""
 
-    def __init__(self, db_name):
+    def __init__(self, db_name, initialize_db=True):
         self.interface = SQLiteInterface()
-        self.interface.init_database(db_name)
+        if initialize_db:
+            self.interface.init_database(db_name)
+        else:
+            self.interface.db_name = db_name
 
     def show_info(self):
         """Tabular view of the settings."""
@@ -249,7 +252,8 @@ def get_command_line_arguments():
 def main():
     """entry point."""
     args = get_command_line_arguments()
-    admin = Admin(args.database)
+    initialize_db = not args.delete_database
+    admin = Admin(args.database, initialize_db)
     if args.info:
         admin.show_info()
     elif args.tasks:
