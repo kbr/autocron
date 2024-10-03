@@ -386,7 +386,7 @@ and imported by the main application: ::
         return {"Hello": "World"}
 
 
-The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really neccessary as autocron detects when the application terminates.
+The ``autocron.start()`` function is called on startup by the ``lifespan`` function. The contextmanager allows to call ``autocron.stop()`` explicitly. This is not really necessary as autocron detects when the application terminates.
 
 To start the FastAPI application call ``$ fastapi dev main.py`` or ``$ fastapi run main.py`` at the command line.
 
