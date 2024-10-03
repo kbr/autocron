@@ -2,8 +2,8 @@ Version History
 ===============
 
 
-1.2.0 dev
----------
+1.2.0 - 2024-10-03
+------------------
 
 - new settings-flag ``blocking-mode`` to activate/deactivate the registration thread in the main process. Useful for application development and debugging.
 - the monitor now runs as a process instead as a thread.
