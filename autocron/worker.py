@@ -213,3 +213,6 @@ def start_worker():
 
 if __name__ == "__main__":
     start_worker()
+    if DJANGO_FRAMEWORK_IN_USE:
+        # escape the django reloader
+        os._exit(0)
