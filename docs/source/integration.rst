@@ -109,9 +109,9 @@ To activate autocron in a django-project, the proper way to do this is in the ``
         name = 'djangoapp'
 
         def ready(self):
-            autocron.start("the_django_app.db")
+            autocron.start("the_django_app.db", workers=1)
 
-Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not.
+Don't forget to register the django-application in the ``INSTALLED_APPS`` settings. Otherwise ``ready()`` will not get called. During startup django may call ``ready()`` multiple times. Calling ``autocron.start()`` multiple times is save because autocron knows whether it is already running or not. The optional argument `workers` is set to 1, which is the default.
 
     **Note:** the django-reloader is known for not working well with multi-threading applications. *autocron* handles this but for development it could be cleaner to set ``--set-blocking-mode=on``. Also the django-reloader does not send a ``SIGTERM`` but replaces the process, so on a reload *autocron* will not shut down and restart, but keep running.
 
@@ -144,7 +144,7 @@ Using flask ``autocron.start()`` is called after creating the flask-app: ::
         task_result = do_this_later()
         return f"Hello, TaskResult uuid: {task_result.uuid}"
 
-Now start flask from the command line ``$ flask --app application run`` and the application runs with background processes.
+Now start flask from the command line ``$ flask --app application run`` and the application runs with background processes. For `start()` the optional workers-argument is omitted, so a single worker will get started.
 
 
 bottle
@@ -344,7 +344,7 @@ The above example can get started from the command-line by ``$ uvicorn applicati
 FastAPI
 .......
 
-FastAPI is based on starlette and has the same backgroundtask-mechanism. But integration of autocron works a bit different as FastAPI uses a contextmanager to call functions at startup and shutdown.
+FastAPI is based on starlette and everything said there also fits for FastAPI. autocron can get integrated the same way, however here is an example using the ``lifespan`` contextmanager.
 
 The decorated functions are defined in a separate module: ::
 

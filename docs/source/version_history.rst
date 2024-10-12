@@ -2,9 +2,11 @@ Version History
 ===============
 
 
-development
------------
+1.2.1 - 2024-10-12
+------------------
 
+- documentation: some details improved.
+- fix: git-tag and version history in sync again (does not affect the functionality of the library).
 
 
 1.2.0 - 2024-10-03

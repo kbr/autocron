@@ -82,7 +82,8 @@ class Engine:
         The ``workers`` argument takes the number of workers (as
         integer) and stores this value in the database. If the value is
         ``None`` (default) the number of workers is taken from the
-        database.
+        database. If ``workers`` is given, it will override and update
+        the corresponding database setting.
 
         The function returns a boolean: ``True`` if workers have been
         started and ``False`` otherwise. A return value of ``False``
