@@ -15,6 +15,7 @@ handles this.
 
 import os
 import pathlib
+import platform
 import signal
 import subprocess
 import sys
@@ -22,6 +23,7 @@ import sys
 from .sqlite_interface import SQLiteInterface
 
 
+IS_WINDOWS = platform.system().lower() == "windows"
 MONITOR_MODULE_NAME = "monitor.py"
 
 
@@ -43,8 +45,9 @@ class Engine:
         # handlers for SIGINT and SIGTERM
         self.orig_signal_handlers = {}
         self.set_signal_handlers()
-        # handler for SIGCHLD
-        signal.signal(signal.SIGCHLD, self._check_monitor_child)
+        if not IS_WINDOWS:
+            # handler for SIGCHLD (not available on windows)
+            signal.signal(signal.SIGCHLD, self._check_monitor_child)
 
     def set_signal_handlers(self):
         """
