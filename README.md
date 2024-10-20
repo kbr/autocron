@@ -38,7 +38,7 @@ Here is a simple example how to use autocron with the flask web-framework that c
     from flask import Flask
 
     app = Flask(__name__)
-    autocron.start("the_flask_app.db")
+    autocron.start("the_flask_app.db", workers=2)
 
     @autocron.cron("* * * * *")
     def cronjob():
@@ -54,7 +54,7 @@ Here is a simple example how to use autocron with the flask web-framework that c
         return "delayed action triggered"
 ```
 
-After creating the flask ``app`` instance calling ``autocron.start(<databasename>)`` starts the background workers. The ``cron`` decorated ``cronjob()`` function will get executed every minute and the ``delay`` decorated ``do_this_later()`` function gets delegated to the background worker every time the application processes the ``/later`` url. Terminating the application will shut down the worker processes.
+After creating the flask ``app`` instance calling ``autocron.start(<databasename>)`` starts the background workers. The ``workers`` argument is optional and defaults to 1. The ``cron`` decorated ``cronjob()`` function will get executed every minute and the ``delay`` decorated ``do_this_later()`` function gets delegated to the background worker every time the application processes the ``/later`` url. Terminating the application will shut down the worker processes.
 
 More information and examples how to use autocron with other frameworks are at the documentation.
 
